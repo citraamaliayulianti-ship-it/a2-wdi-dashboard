@@ -1,0 +1,343 @@
+schema_version: 2
+dashboard:
+  title: Does getting richer mean living longer?
+  subject: world_development_indicators
+  question: As countries get richer, do their people live longer, and is the gap between
+    a country's actual and expected life expectancy linked more to government health
+    spending or to air pollution?
+  audience: Policy analysts in government health, finance and environment ministries
+    (primary); academic researchers in development economics and public health (secondary)
+  entrypoint: app.py
+  pages: []
+  sample_environment_variable: DASHBOARD_SAMPLE_MODE
+sources:
+- id: wdi_gdp_per_capita_ppp
+  publisher: World Bank
+  title: 'World Development Indicators: GDP per capita, PPP (constant 2021 international
+    $) (NY.GDP.PCAP.PP.KD)'
+  url: https://api.worldbank.org/v2/country/all/indicator/NY.GDP.PCAP.PP.KD?format=json&per_page=20000&date=1990:2024
+  licence: Creative Commons Attribution 4.0 (CC BY 4.0)
+  retrieved: '2026-10-12'
+  cadence: Annual series; WDI database updated several times a year (last updated 2026-10-08)
+  status: snapshot
+  notes: Saved as data/raw/NY.GDP.PCAP.PP.KD.json. Original sources named by the World
+    Bank are the International Comparison Program, the Eurostat-OECD PPP Programme, World
+    Bank and OECD national accounts, and the IMF World Economic Outlook.
+- id: wdi_life_expectancy
+  publisher: World Bank
+  title: 'World Development Indicators: Life expectancy at birth, total (years) (SP.DYN.LE00.IN)'
+  url: https://api.worldbank.org/v2/country/all/indicator/SP.DYN.LE00.IN?format=json&per_page=20000&date=1990:2024
+  licence: Creative Commons Attribution 4.0 (CC BY 4.0)
+  retrieved: '2026-10-12'
+  cadence: Annual series; WDI database updated several times a year (last updated 2026-10-08)
+  status: snapshot
+  notes: Saved as data/raw/SP.DYN.LE00.IN.json. Original sources are UN World Population
+    Prospects (UN Population Division), national statistical offices and Eurostat; many
+    values are modelled estimates.
+- id: wdi_gov_health_expenditure
+  publisher: World Bank
+  title: 'World Development Indicators: Domestic general government health expenditure
+    (% of GDP) (SH.XPD.GHED.GD.ZS)'
+  url: https://api.worldbank.org/v2/country/all/indicator/SH.XPD.GHED.GD.ZS?format=json&per_page=20000&date=1990:2024
+  licence: Creative Commons Attribution 4.0 (CC BY 4.0)
+  retrieved: '2026-10-12'
+  cadence: Annual series; WDI database updated several times a year (last updated 2026-10-08)
+  status: snapshot
+  notes: Saved as data/raw/SH.XPD.GHED.GD.ZS.json. Original source is the WHO Global
+    Health Expenditure Database (updated 12 December 2025). Series starts in 2000.
+- id: wdi_pm25_exposure
+  publisher: World Bank
+  title: 'World Development Indicators: PM2.5 air pollution, mean annual exposure (micrograms
+    per cubic meter) (EN.ATM.PM25.MC.M3)'
+  url: https://api.worldbank.org/v2/country/all/indicator/EN.ATM.PM25.MC.M3?format=json&per_page=20000&date=1990:2024
+  licence: Creative Commons Attribution 4.0 (CC BY 4.0)
+  retrieved: '2026-10-12'
+  cadence: Annual series; WDI database updated several times a year (last updated 2026-10-08)
+  status: snapshot
+  notes: Saved as data/raw/EN.ATM.PM25.MC.M3.json. Original source is the IHME Global
+    Burden of Disease Study 2023 air pollution exposure estimates (modelled).
+- id: wb_country_classification
+  publisher: World Bank
+  title: 'World Bank Indicators API: economies with region and income group (FY2027 classification)'
+  url: https://api.worldbank.org/v2/country?format=json&per_page=400
+  licence: Creative Commons Attribution 4.0 (CC BY 4.0)
+  retrieved: '2026-10-12'
+  cadence: Income groups revised each 1 July
+  status: snapshot
+  notes: Saved as data/raw/countries.json. Used to keep the 217 economies and drop the
+    79 regional and income aggregates, and to label each economy's region and income group.
+datasets:
+- id: country_year
+  source_ids:
+  - wdi_gdp_per_capita_ppp
+  - wdi_life_expectancy
+  - wdi_gov_health_expenditure
+  - wdi_pm25_exposure
+  - wb_country_classification
+  sample: data/sample.csv
+  processed_output: data/processed.csv
+  format: csv
+  date_column: date
+  primary_key:
+  - date
+  - country_code
+  minimum_rows: 500
+  latest_observation: '2023-12-31'
+  columns:
+    date:
+      type: date
+      role: time
+      nullable: false
+      date_minimum: '2000-12-31'
+      date_maximum: '2023-12-31'
+    year:
+      type: integer
+      role: time
+      nullable: false
+      minimum: 2000
+      maximum: 2023
+    country_code:
+      type: string
+      role: identifier
+      nullable: false
+    country:
+      type: string
+      role: geography
+      nullable: false
+    region:
+      type: string
+      role: geography
+      nullable: false
+      allowed_values:
+      - East Asia & Pacific
+      - Europe & Central Asia
+      - Latin America & Caribbean
+      - Middle East, North Africa, Afghanistan & Pakistan
+      - North America
+      - South Asia
+      - Sub-Saharan Africa
+    income_group:
+      type: string
+      role: dimension
+      nullable: false
+      allowed_values:
+      - Low income
+      - Lower middle income
+      - Upper middle income
+      - High income
+    gdp_pc_ppp:
+      type: number
+      role: measure
+      nullable: false
+      unit: constant 2021 international $ (PPP) per person
+      minimum: 100
+      maximum: 300000
+    life_expectancy:
+      type: number
+      role: measure
+      nullable: false
+      unit: years
+      minimum: 10
+      maximum: 100
+    predicted_life_expectancy:
+      type: number
+      role: measure
+      nullable: false
+      unit: years
+      minimum: 10
+      maximum: 100
+    residual_years:
+      type: number
+      role: measure
+      nullable: false
+      unit: years
+      minimum: -50
+      maximum: 50
+    gov_health_exp_pct_gdp:
+      type: number
+      role: measure
+      nullable: true
+      unit: percent of GDP
+      minimum: 0
+      maximum: 30
+    pm25_ug_m3:
+      type: number
+      role: measure
+      nullable: true
+      unit: micrograms per cubic metre
+      minimum: 0
+      maximum: 200
+views:
+- id: income_health
+  dataset_id: country_year
+  title: How closely does life expectancy track income?
+  unit: years
+  source_ids:
+  - wdi_gdp_per_capita_ppp
+  - wdi_life_expectancy
+  - wdi_gov_health_expenditure
+  - wdi_pm25_exposure
+  - wb_country_classification
+  controls:
+  - key: income_health_year
+    type: selectbox
+    label: Year
+    default_value: 2023
+    test_value: 2010
+    filter:
+      column: year
+      operator: equals
+  - key: income_health_income
+    type: multiselect
+    label: Income groups
+    default_value:
+    - Low income
+    - Lower middle income
+    - Upper middle income
+    - High income
+    test_value:
+    - Low income
+    - Lower middle income
+    empty_test_value: []
+    empty_expected_text: No countries match the selected filters.
+    filter:
+      column: income_group
+      operator: isin
+  outputs:
+  - chart
+  - metric
+  - download
+- id: residual_ranking
+  dataset_id: country_year
+  title: Which countries live longer or shorter than their income predicts?
+  unit: years
+  source_ids:
+  - wdi_gdp_per_capita_ppp
+  - wdi_life_expectancy
+  - wdi_gov_health_expenditure
+  - wdi_pm25_exposure
+  - wb_country_classification
+  controls:
+  - key: ranking_year
+    type: selectbox
+    label: Year
+    default_value: 2023
+    test_value: 2010
+    filter:
+      column: year
+      operator: equals
+  - key: ranking_region
+    type: multiselect
+    label: Regions
+    default_value:
+    - East Asia & Pacific
+    - Europe & Central Asia
+    - Latin America & Caribbean
+    - Middle East, North Africa, Afghanistan & Pakistan
+    - North America
+    - South Asia
+    - Sub-Saharan Africa
+    test_value:
+    - Sub-Saharan Africa
+    empty_test_value: []
+    empty_expected_text: No countries match the selected filters.
+    filter:
+      column: region
+      operator: isin
+  outputs:
+  - chart
+  - metric
+  - table
+  - download
+- id: gap_factors
+  dataset_id: country_year
+  title: Is the gap linked to government health spending or to air pollution?
+  unit: years
+  source_ids:
+  - wdi_gdp_per_capita_ppp
+  - wdi_life_expectancy
+  - wdi_gov_health_expenditure
+  - wdi_pm25_exposure
+  - wb_country_classification
+  controls:
+  - key: factors_choice
+    type: radio
+    label: Compare the gap with
+    default_value: Government health spending (% of GDP)
+    test_value: PM2.5 air pollution (µg/m³)
+  - key: factors_year
+    type: selectbox
+    label: Year
+    default_value: 2023
+    test_value: 2010
+    filter:
+      column: year
+      operator: equals
+  - key: factors_income
+    type: multiselect
+    label: Income groups
+    default_value:
+    - Low income
+    - Lower middle income
+    - Upper middle income
+    - High income
+    test_value:
+    - Low income
+    - Lower middle income
+    empty_test_value: []
+    empty_expected_text: No countries match the selected filters.
+    filter:
+      column: income_group
+      operator: isin
+  outputs:
+  - chart
+  - metric
+  - download
+pipeline:
+  acquisition_method: script
+  acquisition_path: src/data.py
+  transform_command:
+  - python
+  - -m
+  - src.data
+  download_declared: true
+  download_label: Download filtered data (CSV)
+  date_label: Latest observation
+topic_integrity:
+  indicator_codes:
+  - NY.GDP.PCAP.PP.KD
+  - SP.DYN.LE00.IN
+  - SH.XPD.GHED.GD.ZS
+  - EN.ATM.PM25.MC.M3
+  original_source_organizations:
+  - World Bank International Comparison Program
+  - Eurostat-OECD PPP Programme
+  - World Bank and OECD national accounts
+  - International Monetary Fund (World Economic Outlook)
+  - United Nations Population Division (World Population Prospects)
+  - National statistical offices
+  - Eurostat
+  - World Health Organization (Global Health Expenditure Database)
+  - Institute for Health Metrics and Evaluation (Global Burden of Disease Study 2023)
+  latest_observation_year: 2023
+  indicator_definitions:
+  - 'NY.GDP.PCAP.PP.KD: gross domestic product per person converted to constant 2021
+    international dollars using purchasing power parities.'
+  - 'SP.DYN.LE00.IN: number of years a newborn infant would live if prevailing patterns
+    of mortality at the time of its birth were to stay the same throughout its life.'
+  - 'SH.XPD.GHED.GD.ZS: public expenditure on health from domestic sources as a share
+    of the economy as measured by GDP.'
+  - 'EN.ATM.PM25.MC.M3: population-weighted mean annual exposure to ambient fine particulate
+    matter (PM2.5), in micrograms per cubic metre.'
+  periodicity: Annual
+  aggregation_method: No World Bank regional or income aggregates are used. For each
+    year, an unweighted ordinary least squares line of life expectancy on the natural
+    log of GDP per capita (PPP) is fitted across countries; every country counts once.
+    The residual is actual minus predicted life expectancy.
+  coverage_rule: 217 World Bank economies, 2000-2023. A country-year is included when
+    both GDP per capita (PPP) and life expectancy are reported (4,721 country-years,
+    199 economies). Missing health expenditure or PM2.5 values stay missing and are
+    left out only of view 3's chart for that factor.
+  classification_vintage: World Bank regions and income groups as served by the Indicators
+    API on 2026-10-12 (FY2027 classification, released July 2026), applied to every
+    year.
