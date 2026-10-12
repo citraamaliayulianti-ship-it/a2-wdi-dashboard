@@ -104,11 +104,13 @@ def _year_picker(data: pd.DataFrame, key: str) -> int:
     return st.selectbox("Year", years, index=0, key=key)
 
 
-def render_income_health(data: pd.DataFrame) -> None:
+def render_income_health(data: pd.DataFrame, intro: str | None = None) -> None:
     """View 1: how closely life expectancy tracks income."""
     st.header("1. How closely does life expectancy track income?")
     st.caption("Unit: years of life expectancy at birth. Income is GDP per capita, PPP (constant 2021 international $), shown on a log scale.")
     _latest(data)
+    if intro:
+        st.markdown(intro)
 
     left, right = st.columns([1, 3])
     with left:
@@ -164,11 +166,13 @@ def render_income_health(data: pd.DataFrame) -> None:
     _download(filtered, "income_health_download", f"income_life_expectancy_{year}.csv")
 
 
-def render_residual_ranking(data: pd.DataFrame) -> None:
+def render_residual_ranking(data: pd.DataFrame, intro: str | None = None) -> None:
     """View 2: which countries live longer or shorter than their income predicts."""
     st.header("2. Which countries live longer or shorter than their income predicts?")
     st.caption("Unit: years. The gap is actual life expectancy minus the life expectancy predicted from income for the same year.")
     _latest(data)
+    if intro:
+        st.markdown(intro)
 
     left, right = st.columns([1, 3])
     with left:
@@ -239,11 +243,13 @@ def render_residual_ranking(data: pd.DataFrame) -> None:
     _download(filtered, "ranking_download", f"life_expectancy_gap_{year}.csv")
 
 
-def render_gap_factors(data: pd.DataFrame) -> None:
+def render_gap_factors(data: pd.DataFrame, intro: str | None = None) -> None:
     """View 3: is the gap linked to government health spending or to air pollution?"""
     st.header("3. Is the gap linked to government health spending or to air pollution?")
     st.caption("Unit: years of gap (actual minus predicted life expectancy), compared with a second World Bank indicator.")
     _latest(data)
+    if intro:
+        st.markdown(intro)
 
     factor_name = st.radio("Compare the gap with", list(FACTORS), index=0, horizontal=True, key="factors_choice")
     factor = FACTORS[factor_name]

@@ -6,11 +6,17 @@ A Streamlit dashboard on the World Bank's World Development Indicators (subject:
 
 **Audience.** Policy analysts in government health, finance and environment ministries (primary); academic researchers in development economics and public health (secondary).
 
-**Views.**
+**Pages.** `app.py` sets up navigation across five pages:
 
-1. *How closely does life expectancy track income?* Scatter of life expectancy against GDP per capita (log scale) with one fitted line per year, R² and years gained per doubling of income.
-2. *Which countries live longer or shorter than their income predicts?* Ranking of each country's gap (actual minus predicted life expectancy), with a full table.
-3. *Is the gap linked to government health spending or to air pollution?* The gap against either domestic general government health expenditure (% of GDP) or PM2.5 exposure, with Pearson's r.
+| Page | File | Content |
+|---|---|---|
+| Overview | `home.py` | The question and the two ideas it tests, where the dashboard sits among the WDI data themes, the indicators used, cards linking to each question, and data access |
+| 1. Income and life expectancy | `sections/1_income_and_life_expectancy.py` | View `income_health`: life expectancy against GDP per capita (log scale) with one fitted line per year, R² and years gained per doubling of income |
+| 2. Longer or shorter than predicted | `sections/2_longer_or_shorter.py` | View `residual_ranking`: each country's gap (actual minus predicted life expectancy), largest gaps chart and full table, regional summary |
+| 3. Health spending or air pollution? | `sections/3_spending_or_pollution.py` | View `gap_factors`: the gap against government health expenditure (% of GDP) or PM2.5 exposure, with Pearson's r by year and by income group |
+| Conclusion | `sections/4_conclusion.py` | What the data show and do not show, implications for the audience, methods and limitations |
+
+The explanations on pages 1–3 only describe what the data show; every number in them is computed from the loaded data. The theme icons and the card pictures were made for this dashboard (the card pictures are miniature charts drawn from the data).
 
 ## Data
 
@@ -50,7 +56,7 @@ python -m src.data --validate             # validate data/processed.csv
 
 Without `--acquire`, existing raw files are reused. If the API cannot be reached, open each URL in a browser and save it under `data/raw/` with the indicator code as the file name (for example `data/raw/SP.DYN.LE00.IN.json`) and `countries.json`.
 
-`src/data.py` holds acquisition, transformation and validation. `src/analysis.py` holds the line fit used by both the pipeline and the views. `src/views.py` holds the presentation.
+`src/data.py` holds acquisition, transformation and validation. `src/analysis.py` holds the line fit used by both the pipeline and the views. Presentation lives in `src/views.py` (the three assessed views), `src/stories.py` (data-only page summaries and the conclusion), `src/overview.py` (overview page parts) and `src/loading.py` (cached data loading).
 
 ## Method and limitations
 

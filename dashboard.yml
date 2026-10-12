@@ -8,7 +8,12 @@ dashboard:
   audience: Policy analysts in government health, finance and environment ministries
     (primary); academic researchers in development economics and public health (secondary)
   entrypoint: app.py
-  pages: []
+  pages:
+  - home.py
+  - sections/1_income_and_life_expectancy.py
+  - sections/2_longer_or_shorter.py
+  - sections/3_spending_or_pollution.py
+  - sections/4_conclusion.py
   sample_environment_variable: DASHBOARD_SAMPLE_MODE
 sources:
 - id: wdi_gdp_per_capita_ppp
@@ -170,6 +175,7 @@ datasets:
 views:
 - id: income_health
   dataset_id: country_year
+  page: sections/1_income_and_life_expectancy.py
   title: How closely does life expectancy track income?
   unit: years
   source_ids:
@@ -209,6 +215,7 @@ views:
   - download
 - id: residual_ranking
   dataset_id: country_year
+  page: sections/2_longer_or_shorter.py
   title: Which countries live longer or shorter than their income predicts?
   unit: years
   source_ids:
@@ -251,6 +258,7 @@ views:
   - download
 - id: gap_factors
   dataset_id: country_year
+  page: sections/3_spending_or_pollution.py
   title: Is the gap linked to government health spending or to air pollution?
   unit: years
   source_ids:
