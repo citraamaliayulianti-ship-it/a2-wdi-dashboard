@@ -40,32 +40,94 @@ def data_path() -> Path:
     return PROCESSED
 
 
-def key_findings(data: pd.DataFrame) -> None:
+def introduction(data: pd.DataFrame) -> None:
+    st.subheader("Why this question matters")
+    st.markdown(
+        "If a country gets richer, should its people expect to live longer? There are two competing ideas about "
+        "how economic growth reaches people's health, and they point policy in different directions."
+    )
+    left, right = st.columns(2)
+    with left.container(border=True):
+        st.markdown(
+            "**Idea 1: growth pays for health.** Richer countries can afford better health services, so people "
+            "live longer.  \n*Tested with:* domestic general government health expenditure (% of GDP)."
+        )
+    with right.container(border=True):
+        st.markdown(
+            "**Idea 2: growth costs health.** Growth can bring industry, traffic and dirtier air, which can "
+            "shorten lives.  \n*Tested with:* PM2.5 air pollution exposure (µg/m³)."
+        )
+    st.markdown(
+        "Both ideas could be partly true at the same time. This dashboard cannot prove either one; it checks whether "
+        "the pattern across countries is **consistent** with them."
+    )
+    st.subheader("How the dashboard answers it")
+    st.markdown(
+        "1. **View 1 sets the baseline:** how much longer people live, on average, in richer countries.\n"
+        "2. **View 2 finds the exceptions:** countries whose people live longer or shorter than their income "
+        "predicts. This difference is called the *gap*: a gap of +5 means five years longer than in countries "
+        "with similar incomes.\n"
+        "3. **View 3 tests the two ideas:** does the gap go with government health spending (idea 1) or with air "
+        "pollution (idea 2)?"
+    )
+    years = sorted(int(y) for y in data["year"].unique())
+    st.caption(
+        f"What the data cover: {data['country_code'].nunique()} economies from the World Bank's World Development "
+        f"Indicators, {years[0]}–{years[-1]} ({len(years)} years in this file), one row per country and year with "
+        "income, life expectancy, government health spending and PM2.5 air pollution."
+    )
+
+
+def conclusion(data: pd.DataFrame) -> None:
     first, latest = int(data["year"].min()), int(data["year"].max())
     now = data.loc[data["year"] == latest]
     fit_now, fit_first = income_fit(now), income_fit(data.loc[data["year"] == first])
-    health = now.dropna(subset=["gov_health_exp_pct_gdp"])
-    air = now.dropna(subset=["pm25_ug_m3"])
-    r_health = fit_line(health["gov_health_exp_pct_gdp"], health["residual_years"]).correlation
-    r_air = fit_line(air["pm25_ug_m3"], air["residual_years"]).correlation
+    health = fit_line(now["gov_health_exp_pct_gdp"], now["residual_years"])
+    air = fit_line(now["pm25_ug_m3"], now["residual_years"])
+    ranked = now.sort_values("residual_years", ascending=False)
+    best = ", ".join(ranked["country"].head(3))
+    worst = ", ".join(ranked["country"].tail(3).iloc[::-1])
     sign = lambda r: "positive" if r > 0 else "negative"
-    st.subheader(f"Key findings for {latest}")
+
+    st.header("Conclusion: what the evidence shows, and what it does not")
+    st.markdown(f"**What the data show for {latest}**")
     st.markdown(
-        f"1. **Income is the strongest single guide.** It accounts for {fit_now.r_squared:.0%} of the differences "
-        f"in life expectancy between {fit_now.n} countries. Each doubling of income goes with about "
-        f"{fit_now.slope * math.log(2):.1f} more years of life, a flatter line than in {first} "
+        f"1. **Richer countries do live longer.** Income accounts for {fit_now.r_squared:.0%} of the differences in "
+        f"life expectancy between {fit_now.n} countries. Each doubling of income goes with about "
+        f"{fit_now.slope * math.log(2):.1f} more years of life, a flatter slope than in {first} "
         f"({fit_first.slope * math.log(2):.1f} years per doubling).\n"
-        f"2. **Countries with similar incomes still differ a lot.** {int((now['residual_years'] >= 5).sum())} countries "
-        f"live at least 5 years longer than their income predicts and {int((now['residual_years'] <= -5).sum())} live "
-        "at least 5 years shorter (view 2).\n"
-        f"3. **Neither proposed explanation accounts for much of that gap.** Government health spending has a "
-        f"{describe_strength(r_health)} {sign(r_health)} link with the gap (r = {r_health:+.2f}) and PM2.5 air "
-        f"pollution a {describe_strength(r_air)} {sign(r_air)} link (r = {r_air:+.2f}). Both point the way the question "
-        "anticipated, but most of the gap is not explained by either measure; other causes would need separate evidence."
+        f"2. **But income is not the whole story.** Countries with similar incomes range from "
+        f"{ranked['residual_years'].iloc[0]:+.1f} to {ranked['residual_years'].iloc[-1]:+.1f} years around the life "
+        f"expectancy their income predicts. {int((now['residual_years'] >= 5).sum())} countries live at least 5 years "
+        f"longer than predicted and {int((now['residual_years'] <= -5).sum())} at least 5 years shorter.\n"
+        f"3. **Both ideas get only weak support.** Government health spending has a {describe_strength(health.correlation)} "
+        f"{sign(health.correlation)} link with the gap (r = {health.correlation:+.2f}) and PM2.5 air pollution a "
+        f"{describe_strength(air.correlation)} {sign(air.correlation)} link (r = {air.correlation:+.2f}). The directions "
+        f"match ideas 1 and 2, but each explains only about {health.r_squared:.1%} and {air.r_squared:.1%} of the gap."
     )
-    st.caption(
-        "For policy analysts: the over-performers in view 2 are peers that achieve longer lives at similar incomes and "
-        "are worth closer study. Spending and air-quality figures alone do not explain their advantage."
+    st.markdown("**What the data cannot tell us**")
+    st.markdown(
+        "- **Cause and effect.** These are associations between national averages. Healthier populations may also "
+        "earn more, so the arrow can run both ways.\n"
+        "- **Why the exceptions differ.** Factors such as conflict, disease outbreaks or how health money is spent are "
+        "not in this dataset.\n"
+        "- **Exact values for every country.** Many figures, including most life expectancy and all PM2.5 values, are "
+        "modelled estimates (see Methods and limitations)."
+    )
+    st.markdown("**What this means for policy analysts**")
+    st.markdown(
+        "- Income growth goes with longer lives, but it does not guarantee them: countries at similar incomes differ "
+        "by many years.\n"
+        f"- Countries well above the line in {latest}, such as {best}, are peers worth studying. Countries well below "
+        f"it, such as {worst}, are places where income is not turning into longer lives.\n"
+        "- This evidence does not show that more health spending or cleaner air alone would close the gap. Decisions "
+        "on either should rest on further, country-level evidence."
+    )
+    st.markdown("**Next steps for researchers**")
+    st.markdown(
+        "Follow the same countries over time rather than comparing countries in one year; add other WDI factors such "
+        "as sanitation, disease burden or conflict; weight countries by population; and use the uncertainty ranges "
+        "published with modelled estimates."
     )
 
 
@@ -77,23 +139,9 @@ st.caption(
     "researchers in development economics and public health (see Methods and limitations)."
 )
 data = load_data(str(data_path()))
-years = sorted(int(y) for y in data["year"].unique())
-st.write(
-    f"**What the data cover:** {data['country_code'].nunique()} economies from the World Bank's World Development "
-    f"Indicators, {years[0]}–{years[-1]} ({len(years)} years in this file), one row per country and year with "
-    "income, life expectancy, government health spending and PM2.5 air pollution."
-)
-with st.expander("How to read this dashboard", expanded=False):
-    st.markdown(
-        "- **View 1** draws one line through all countries: the life expectancy that is typical for each income level.\n"
-        "- **View 2** ranks countries by their *gap*: actual life expectancy minus the value the line predicts. "
-        "A gap of +5 means people live five years longer than in countries with similar incomes.\n"
-        "- **View 3** checks whether the gap goes with government health spending or with air pollution, the two "
-        "explanations in the question."
-    )
+introduction(data)
 
-key_findings(data)
-
+st.divider()
 with st.container(key="income_health"):
     render_income_health(data)
 
@@ -104,6 +152,9 @@ with st.container(key="residual_ranking"):
 st.divider()
 with st.container(key="gap_factors"):
     render_gap_factors(data)
+
+st.divider()
+conclusion(data)
 
 st.divider()
 with st.expander("Methods and limitations (for academic readers)"):
