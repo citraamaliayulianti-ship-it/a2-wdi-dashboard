@@ -23,7 +23,7 @@ def _app(monkeypatch, page: str | None = None) -> AppTest:
 def test_overview_renders(monkeypatch) -> None:
     app = _app(monkeypatch)
     assert not app.exception
-    assert app.title[0].value == "Does getting richer mean living longer?"
+    assert any("Does getting richer mean living longer?" in item.value for item in app.markdown)
 
 
 def test_every_page_renders(monkeypatch) -> None:

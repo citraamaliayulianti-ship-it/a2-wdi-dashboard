@@ -25,6 +25,56 @@ API_URLS = {
     "Country list with regions and income groups": "https://api.worldbank.org/v2/country?format=json&per_page=400",
 }
 
+# ---------------------------------------------------------------- hero banner
+
+def _hero_pattern(now: pd.DataFrame) -> str:
+    """Decorative backdrop: every country in the latest year, life expectancy against income."""
+    width, height = 560, 320
+    lo, hi = math.log10(500), math.log10(200000)
+    xs = _scale(np.log10(now["gdp_pc_ppp"]), lo, hi, 20, width - 20)
+    ys = _scale(now["life_expectancy"], 45, 90, height - 20, 20)
+    dots = "".join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4" fill="#86b6ef" fill-opacity="0.45"/>' for x, y in zip(xs, ys))
+    fit = income_fit(now)
+    ends = _scale(fit.intercept + fit.slope * np.log(np.array([500.0, 200000.0])), 45, 90, height - 20, 20)
+    line = (f'<line x1="20" y1="{ends[0]:.1f}" x2="{width - 20}" y2="{ends[1]:.1f}" stroke="#ffffff" '
+            f'stroke-opacity="0.55" stroke-width="2.5"/>')
+    return (f'<svg viewBox="0 0 {width} {height}" aria-hidden="true" style="position:absolute;right:-10px;bottom:-10px;'
+            f'width:min(56%,560px);height:auto;opacity:0.9">{dots}{line}</svg>')
+
+
+def hero(data: pd.DataFrame, title: str, question: str) -> None:
+    """Opening banner: what the dashboard asks, for whom, and where to start."""
+    years = sorted(int(y) for y in data["year"].unique())
+    latest = data.loc[data["year"] == years[-1]]
+    kicker = (f"World Development Indicators · {years[0]}–{years[-1]} · "
+              f"{data['country_code'].nunique()} economies")
+    button = ("display:inline-block;padding:10px 18px;border-radius:8px;font-weight:600;font-size:15px;"
+              "text-decoration:none;margin:0 10px 10px 0;")
+    st.markdown(
+        f'<div style="position:relative;overflow:hidden;border-radius:16px;background:#0d366b;'
+        f'padding:44px 40px 34px;margin-bottom:8px">'
+        f'{_hero_pattern(latest)}'
+        f'<div style="position:relative;max-width:720px">'
+        f'<div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#b7d3f6">'
+        f'{html.escape(kicker)}</div>'
+        f'<h1 style="color:#ffffff;font-size:2.6rem;line-height:1.15;margin:10px 0 14px;padding:0">'
+        f'{html.escape(title)}</h1>'
+        f'<p style="color:#e6eefb;font-size:1.1rem;line-height:1.55;margin:0 0 16px">{html.escape(question)}</p>'
+        f'<div style="margin:0 0 22px">'
+        f'<span style="display:inline-block;background:rgba(255,255,255,0.14);color:#ffffff;border-radius:999px;'
+        f'padding:4px 12px;font-size:13px;margin:0 6px 6px 0">For: government policy analysts</span>'
+        f'<span style="display:inline-block;background:rgba(255,255,255,0.14);color:#ffffff;border-radius:999px;'
+        f'padding:4px 12px;font-size:13px;margin:0 6px 6px 0">Also for: academic researchers</span></div>'
+        f'<a href="income" target="_self" style="{button}background:#ffffff;color:#0d366b">Start with question 1 →</a>'
+        f'<a href="#about-the-data" target="_self" style="{button}border:1.5px solid #ffffff;color:#ffffff">About the data</a>'
+        f'<a href="#access-the-data" target="_self" style="{button}border:1.5px solid #ffffff;color:#ffffff">Access the data</a>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("Background pattern: every country's life expectancy against its income in "
+               f"{years[-1]}, drawn from this dashboard's data.")
+
+
 # ---------------------------------------------------------------- introduction
 
 def introduction() -> None:
