@@ -293,7 +293,7 @@ def render_gap_factors(data: pd.DataFrame) -> None:
         st.markdown(
             f"**Reading the chart:** in {year}, countries with more {factor['short']} tend to live {degree}"
             f"{direction} than their income predicts. The link is **{strength}** (r = {fit.correlation:+.2f}): "
-            f"{factor['short']} accounts for about **{fit.r_squared:.0%}** of the variation in the gap. "
+            f"{factor['short']} accounts for about **{fit.r_squared:.1%}** of the variation in the gap. "
             "Dots above the dashed line live longer than predicted. This is an association across countries, "
             "not proof that one causes the other."
         )
