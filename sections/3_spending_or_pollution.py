@@ -9,7 +9,6 @@ from src.views import render_gap_factors
 
 data = get_data()
 
-st.caption("QUESTION 3 OF 3")
 with st.container(key="gap_factors"):
     render_gap_factors(
         data,

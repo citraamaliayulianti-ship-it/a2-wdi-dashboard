@@ -19,8 +19,8 @@ QUESTION = (
     "expected life expectancy linked more to government health spending or to air pollution?"
 )
 AUDIENCE = (
-    "Policy analysts in government health, finance and environment ministries (primary), and academic "
-    "researchers in development economics and public health (secondary)."
+    "Government policy analysts in health, finance and environment ministries, and academic researchers in "
+    "development economics and public health"
 )
 
 

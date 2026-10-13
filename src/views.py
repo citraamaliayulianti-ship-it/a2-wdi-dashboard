@@ -14,6 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from src.analysis import describe_strength, fit_line, format_interval, includes_zero, income_fit
+from src.theme import BANNER, banner, latest, pattern_factors, pattern_gaps, pattern_income
 
 
 DOWNLOAD_LABEL = "Download filtered data (CSV)"
@@ -104,9 +105,25 @@ def _year_picker(data: pd.DataFrame, key: str) -> int:
     return st.selectbox("Year", years, index=0, key=key)
 
 
+TITLES = {
+    "income": "How closely does life expectancy track income?",
+    "gaps": "Which countries live longer or shorter than their income predicts?",
+    "factors": "Is the gap linked to government health spending or to air pollution?",
+}
+SUBTITLES = {
+    "income": "One line through every country shows the life expectancy that is typical for each income level.",
+    "gaps": "Each country's gap: its actual life expectancy minus what its income predicts.",
+    "factors": "Does the gap go with government health spending (idea 1) or with air pollution (idea 2)?",
+}
+
+
+def _heading(page: str, number: int, data: pd.DataFrame, pattern) -> None:
+    banner(f"Question {number} of 3", TITLES[page], SUBTITLES[page], BANNER[page], pattern(latest(data)))
+
+
 def render_income_health(data: pd.DataFrame, intro: str | None = None) -> None:
     """View 1: how closely life expectancy tracks income."""
-    st.header("1. How closely does life expectancy track income?")
+    _heading("income", 1, data, pattern_income)
     st.caption("Unit: years of life expectancy at birth. Income is GDP per capita, PPP (constant 2021 international $), shown on a log scale.")
     _latest(data)
     if intro:
@@ -170,7 +187,7 @@ def render_income_health(data: pd.DataFrame, intro: str | None = None) -> None:
 
 def render_residual_ranking(data: pd.DataFrame, intro: str | None = None) -> None:
     """View 2: which countries live longer or shorter than their income predicts."""
-    st.header("2. Which countries live longer or shorter than their income predicts?")
+    _heading("gaps", 2, data, pattern_gaps)
     st.caption("Unit: years. The gap is actual life expectancy minus the life expectancy predicted from income for the same year.")
     _latest(data)
     if intro:
@@ -247,7 +264,7 @@ def render_residual_ranking(data: pd.DataFrame, intro: str | None = None) -> Non
 
 def render_gap_factors(data: pd.DataFrame, intro: str | None = None) -> None:
     """View 3: is the gap linked to government health spending or to air pollution?"""
-    st.header("3. Is the gap linked to government health spending or to air pollution?")
+    _heading("factors", 3, data, pattern_factors)
     st.caption("Unit: years of gap (actual minus predicted life expectancy), compared with a second World Bank indicator.")
     _latest(data)
     if intro:

@@ -9,7 +9,6 @@ from src.views import render_income_health
 
 data = get_data()
 
-st.caption("QUESTION 1 OF 3")
 with st.container(key="income_health"):
     render_income_health(
         data,

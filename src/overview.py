@@ -42,7 +42,7 @@ def _hero_pattern(now: pd.DataFrame) -> str:
             f'width:min(56%,560px);height:auto;opacity:0.9">{dots}{line}</svg>')
 
 
-def hero(data: pd.DataFrame, title: str, question: str) -> None:
+def hero(data: pd.DataFrame, title: str, question: str, audience: str) -> None:
     """Opening banner: what the dashboard asks, for whom, and where to start."""
     years = sorted(int(y) for y in data["year"].unique())
     latest = data.loc[data["year"] == years[-1]]
@@ -60,11 +60,9 @@ def hero(data: pd.DataFrame, title: str, question: str) -> None:
         f'<h1 style="color:#ffffff;font-size:2.6rem;line-height:1.15;margin:10px 0 14px;padding:0">'
         f'{html.escape(title)}</h1>'
         f'<p style="color:#e6eefb;font-size:1.1rem;line-height:1.55;margin:0 0 16px">{html.escape(question)}</p>'
-        f'<div style="margin:0 0 22px">'
-        f'<span style="display:inline-block;background:rgba(255,255,255,0.14);color:#ffffff;border-radius:999px;'
-        f'padding:4px 12px;font-size:13px;margin:0 6px 6px 0">For: government policy analysts</span>'
-        f'<span style="display:inline-block;background:rgba(255,255,255,0.14);color:#ffffff;border-radius:999px;'
-        f'padding:4px 12px;font-size:13px;margin:0 6px 6px 0">Also for: academic researchers</span></div>'
+        f'<div style="margin:0 0 22px"><span style="display:inline-block;background:rgba(255,255,255,0.14);'
+        f'color:#ffffff;border-radius:999px;padding:5px 14px;font-size:14px;line-height:1.45">'
+        f'For: {html.escape(audience[0].lower() + audience[1:])}</span></div>'
         f'<a href="income" target="_self" style="{button}background:#ffffff;color:#0d366b">Start with question 1 →</a>'
         f'<a href="#about-the-data" target="_self" style="{button}border:1.5px solid #ffffff;color:#ffffff">About the data</a>'
         f'<a href="#access-the-data" target="_self" style="{button}border:1.5px solid #ffffff;color:#ffffff">Access the data</a>'

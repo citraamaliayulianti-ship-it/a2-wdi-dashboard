@@ -2,13 +2,13 @@
 
 import streamlit as st
 
-from src.loading import QUESTION, TITLE, get_data
+from src.loading import AUDIENCE, QUESTION, TITLE, get_data
 from src.overview import about_the_data, access_data, data_themes, hero, introduction, question_cards
 
 
 data = get_data()
 
-hero(data, TITLE, QUESTION)
+hero(data, TITLE, QUESTION, AUDIENCE)
 introduction()
 st.divider()
 data_themes()

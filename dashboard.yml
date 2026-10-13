@@ -5,8 +5,8 @@ dashboard:
   question: As countries get richer, do their people live longer, and is the gap between
     a country's actual and expected life expectancy linked more to government health
     spending or to air pollution?
-  audience: Policy analysts in government health, finance and environment ministries
-    (primary); academic researchers in development economics and public health (secondary)
+  audience: Government policy analysts in health, finance and environment ministries,
+    and academic researchers in development economics and public health
   entrypoint: app.py
   pages:
   - home.py
@@ -72,6 +72,17 @@ sources:
   status: snapshot
   notes: Saved as data/raw/countries.json. Used to keep the 217 economies and drop the
     79 regional and income aggregates, and to label each economy's region and income group.
+- id: natural_earth_outlines
+  publisher: Natural Earth
+  title: 'Admin 0 – Countries, 1:110m (via world-atlas 2.0.2, ids recoded to ISO alpha-3)'
+  url: https://www.naturalearthdata.com/downloads/110m-cultural-vectors/
+  licence: Public domain (Natural Earth); world-atlas packaging under the ISC licence
+  retrieved: '2026-10-13'
+  cadence: Occasional releases
+  status: snapshot
+  notes: Contextual source for the map on page 2 only (not part of the assessed dataset). Saved as
+    data/geo/countries-110m-iso3.json by src/build_map.py, which replaces ISO numeric ids with
+    alpha-3 codes from world-countries 5.1.0 (ODbL); Kosovo is coded XKX.
 datasets:
 - id: country_year
   source_ids:
