@@ -6,15 +6,16 @@ A Streamlit dashboard on the World Bank's World Development Indicators (subject:
 
 **Audience.** Policy analysts in government health, finance and environment ministries (primary); academic researchers in development economics and public health (secondary).
 
-**Pages.** `app.py` sets up navigation across five pages:
+**Pages.** `app.py` sets up navigation across six pages:
 
 | Page | File | Content |
 |---|---|---|
 | Overview | `home.py` | The question and the two ideas it tests, where the dashboard sits among the WDI data themes, the indicators used, cards linking to each question, and data access |
-| 1. Income and life expectancy | `sections/1_income_and_life_expectancy.py` | View `income_health`: life expectancy against GDP per capita (log scale) with one fitted line per year, R² and years gained per doubling of income |
+| 1. Income and life expectancy | `sections/1_income_and_life_expectancy.py` | View `income_health`: life expectancy against GDP per capita (log scale) with one fitted line per year, R² and years gained per doubling of income (with 95% CI); then change within each country 2000–2023 (income growth vs life-expectancy gain) |
 | 2. Longer or shorter than predicted | `sections/2_longer_or_shorter.py` | View `residual_ranking`: each country's gap (actual minus predicted life expectancy), largest gaps chart and full table, regional summary |
 | 3. Health spending or air pollution? | `sections/3_spending_or_pollution.py` | View `gap_factors`: the gap against government health expenditure (% of GDP) or PM2.5 exposure, with Pearson's r by year and by income group |
 | Conclusion | `sections/4_conclusion.py` | What the data show and do not show, implications for the audience, methods and limitations |
+| Country spotlight | `sections/5_country_spotlight.py` | Tool: one country against its ten closest income peers (gap, rank, health spending, PM2.5, gap over time) |
 
 The explanations on pages 1–3 only describe what the data show; every number in them is computed from the loaded data. The theme icons and the card pictures were made for this dashboard (the card pictures are miniature charts drawn from the data).
 
@@ -56,8 +57,8 @@ python -m src.data --validate             # validate data/processed.csv
 
 Without `--acquire`, existing raw files are reused. If the API cannot be reached, open each URL in a browser and save it under `data/raw/` with the indicator code as the file name (for example `data/raw/SP.DYN.LE00.IN.json`) and `countries.json`.
 
-`src/data.py` holds acquisition, transformation and validation. `src/analysis.py` holds the line fit used by both the pipeline and the views. Presentation lives in `src/views.py` (the three assessed views), `src/stories.py` (data-only page summaries and the conclusion), `src/overview.py` (overview page parts) and `src/loading.py` (cached data loading).
+`src/data.py` holds acquisition, transformation and validation. `src/analysis.py` holds the line fit used by both the pipeline and the views. Presentation lives in `src/views.py` (the three assessed views), `src/stories.py` (data-only page summaries, change over time and the conclusion), `src/overview.py` (overview page parts), `src/spotlight.py` (country spotlight) and `src/loading.py` (cached data loading).
 
 ## Method and limitations
 
-For each year, ordinary least squares fits life expectancy on ln(GDP per capita, PPP) across countries, unweighted. The residual (gap) is actual minus predicted life expectancy. These are cross-country associations, not causal effects. Many values are modelled, notably life expectancy (UN WPP) and PM2.5 (GBD). Income groups use the FY2027 classification for every year. The dashboard's "Methods and limitations" section has the full notes.
+For each year, ordinary least squares fits life expectancy on ln(GDP per capita, PPP) across countries, unweighted. The residual (gap) is actual minus predicted life expectancy. Change over time regresses each country's change in life expectancy on its change in ln(GDP per capita) between the first and last year. Confidence intervals are approximate 95% intervals (slope ± 1.96 SE; Fisher z for r) and do not include the error in modelled estimates. These are cross-country associations, not causal effects. Many values are modelled, notably life expectancy (UN WPP) and PM2.5 (GBD). Income groups use the FY2027 classification for every year. The dashboard's "Methods and limitations" section has the full notes.

@@ -3,7 +3,7 @@
 import streamlit as st
 
 from src.loading import get_data
-from src.stories import HOME, PAGE_GAPS, income_summary, page_nav
+from src.stories import HOME, PAGE_GAPS, change_over_time, income_summary, page_nav
 from src.views import render_income_health
 
 
@@ -21,4 +21,6 @@ with st.container(key="income_health"):
         ),
     )
 income_summary(data)
+st.divider()
+change_over_time(data)
 page_nav(previous=(HOME, "Overview"), following=(PAGE_GAPS, "Longer or shorter than predicted"))

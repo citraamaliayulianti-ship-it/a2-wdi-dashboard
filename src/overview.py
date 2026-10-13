@@ -14,7 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from src.analysis import fit_line, income_fit
-from src.stories import PAGE_CONCLUSION, PAGE_FACTORS, PAGE_GAPS, PAGE_INCOME
+from src.stories import PAGE_CONCLUSION, PAGE_FACTORS, PAGE_GAPS, PAGE_INCOME, PAGE_SPOTLIGHT
 from src.views import LONGER, SHORTER, INK, GRID
 
 API_URLS = {
@@ -289,6 +289,11 @@ def question_cards(data: pd.DataFrame) -> None:
             st.caption(kicker)
             st.markdown(f"**{title}**")
             st.page_link(page, label="Open page", icon=":material/arrow_forward:")
+    with st.container(border=True):
+        left, right = st.columns([3, 1], vertical_alignment="center")
+        left.markdown("**Looking at one country?** The Country spotlight compares any country's life expectancy with "
+                      "what its income predicts and with its ten closest income peers.")
+        right.page_link(PAGE_SPOTLIGHT, label="Open the Country spotlight", icon=":material/travel_explore:")
 
 # ---------------------------------------------------------------- data access
 

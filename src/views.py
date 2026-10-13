@@ -13,7 +13,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from src.analysis import describe_strength, fit_line, income_fit
+from src.analysis import describe_strength, fit_line, format_interval, includes_zero, income_fit
 
 
 DOWNLOAD_LABEL = "Download filtered data (CSV)"
@@ -158,8 +158,10 @@ def render_income_health(data: pd.DataFrame, intro: str | None = None) -> None:
             f"**Reading the chart:** each dot is a country in {year}; the grey line is the life expectancy "
             f"typical for each income level. Income alone accounts for **{fit.r_squared:.0%}** of the differences "
             f"in life expectancy between the {fit.n} countries, and each doubling of income goes with about "
-            f"**{per_doubling:.1f} more years** of life. The dots furthest above or below the line are labelled; "
-            "view 2 ranks them."
+            f"**{per_doubling:.1f} more years** of life (approximate 95% confidence interval "
+            f"{format_interval(fit.slope_ci(math.log(2)), '.1f')} years). The dots furthest above or below the line are "
+            "labelled; page 2 ranks them. Comparing countries in one year is not the same as following one country "
+            "over time; the section below this chart does that."
         )
 
     _sources()
@@ -296,10 +298,16 @@ def render_gap_factors(data: pd.DataFrame, intro: str | None = None) -> None:
         direction = "longer" if fit.slope > 0 else "shorter"
         strength = describe_strength(fit.correlation)
         degree = "slightly " if abs(fit.correlation) < 0.3 else ""
+        interval = fit.correlation_ci()
+        uncertainty = (
+            "This interval includes zero, so in this selection the data cannot tell this link apart from no link "
+            "at all." if includes_zero(interval) else "This interval does not include zero."
+        )
         st.markdown(
             f"**Reading the chart:** in {year}, countries with more {factor['short']} tend to live {degree}"
-            f"{direction} than their income predicts. The link is **{strength}** (r = {fit.correlation:+.2f}): "
-            f"{factor['short']} accounts for about **{fit.r_squared:.1%}** of the variation in the gap. "
+            f"{direction} than their income predicts. The link is **{strength}** (r = {fit.correlation:+.2f}; "
+            f"approximate 95% confidence interval {format_interval(interval)}). {uncertainty} "
+            f"{factor['short'][0].upper() + factor['short'][1:]} accounts for about **{fit.r_squared:.1%}** of the variation in the gap. "
             "Dots above the dashed line live longer than predicted. This is an association across countries, "
             "not proof that one causes the other."
         )

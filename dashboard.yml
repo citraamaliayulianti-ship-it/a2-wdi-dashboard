@@ -14,6 +14,7 @@ dashboard:
   - sections/2_longer_or_shorter.py
   - sections/3_spending_or_pollution.py
   - sections/4_conclusion.py
+  - sections/5_country_spotlight.py
   sample_environment_variable: DASHBOARD_SAMPLE_MODE
 sources:
 - id: wdi_gdp_per_capita_ppp

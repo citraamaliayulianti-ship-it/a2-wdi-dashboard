@@ -9,6 +9,7 @@ PAGES = [
     "sections/2_longer_or_shorter.py",
     "sections/3_spending_or_pollution.py",
     "sections/4_conclusion.py",
+    "sections/5_country_spotlight.py",
 ]
 
 
@@ -43,3 +44,10 @@ def test_factor_switch_runs(monkeypatch) -> None:
     app = _app(monkeypatch, PAGES[2])
     app.radio(key="factors_choice").set_value("PM2.5 air pollution (µg/m³)").run()
     assert not app.exception
+
+
+def test_spotlight_switches_country(monkeypatch) -> None:
+    app = _app(monkeypatch, PAGES[4])
+    app.selectbox(key="spotlight_country").set_value("Nigeria").run()
+    assert not app.exception
+    assert any("Nigeria" in item.value for item in app.markdown)
