@@ -6,21 +6,24 @@ text always matches the data the page is using.
 
 from __future__ import annotations
 
+import math
+
+import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-from src.analysis import decimal_year, fit_trend, format_interval
-from src.views import (DEFAULT_LAG, FIRST_RATE_YEAR, RECORD_ORDER, adjusted_series, enso_fits, record_trends)
+from src.analysis import (country_changes, describe_strength, fit_line, format_interval, includes_zero,
+                          income_fit)
+from src.views import INK, POINT, _style
 
 
 HOME = "home.py"
-PAGE_RATE = "sections/1_warming_rate.py"
-PAGE_ENSO = "sections/2_el_nino.py"
-PAGE_ACCEL = "sections/3_acceleration.py"
+PAGE_INCOME = "sections/1_income_and_life_expectancy.py"
+PAGE_GAPS = "sections/2_longer_or_shorter.py"
+PAGE_FACTORS = "sections/3_spending_or_pollution.py"
 PAGE_CONCLUSION = "sections/4_conclusion.py"
-
-PREINDUSTRIAL = (1850, 1900)
+PAGE_SPOTLIGHT = "sections/5_country_spotlight.py"
 
 
 def page_nav(previous: tuple[str, str] | None, following: tuple[str, str] | None) -> None:
@@ -32,311 +35,347 @@ def page_nav(previous: tuple[str, str] | None, following: tuple[str, str] | None
         right.page_link(following[0], label=f"Next: {following[1]}", icon=":material/arrow_forward:")
 
 
-def latest_year(data: pd.DataFrame) -> int:
-    return int(data["year"].max())
+PER_DOUBLING = "Extra years per doubling of income"
 
 
-# ---------------------------------------------------------------- shared calculations
-
-@st.cache_data
-def rates_from(data: pd.DataFrame, starts: tuple[int, ...]) -> pd.DataFrame:
-    """Straight-line rate from each start year to the latest month, for every record."""
+def year_fits(data: pd.DataFrame) -> pd.DataFrame:
     rows = []
-    for start in starts:
-        if start < data["year"].min():
-            continue
-        trends = record_trends(data.loc[data["year"] >= start])
-        for record, trend in trends.items():
-            rows.append({"start": start, "record": record, "rate": trend.rate, "low": trend.low, "high": trend.high})
+    for year, frame in data.groupby("year"):
+        fit = income_fit(frame)
+        rows.append({"Year": int(year), "Countries": fit.n, "R²": fit.r_squared,
+                     PER_DOUBLING: fit.slope * math.log(2),
+                     "95% confidence interval": format_interval(fit.slope_ci(math.log(2)), ".2f")})
     return pd.DataFrame(rows)
 
 
-@st.cache_data
-def above_preindustrial(data: pd.DataFrame) -> pd.DataFrame:
-    """Warming relative to 1850-1900 for the records that reach back that far."""
-    rows = []
-    for record in RECORD_ORDER:
-        part = data.loc[data["record"] == record].sort_values("date")
-        base = part.loc[part["year"].between(*PREINDUSTRIAL)]
-        if base["year"].min() != PREINDUSTRIAL[0] or len(base) < 600:
-            continue
-        offset = base["anomaly_c"].mean()
-        full_years = part.groupby("year").filter(lambda g: len(g) == 12)
-        last_full = int(full_years["year"].max())
-        twenty = full_years.loc[full_years["year"].between(last_full - 19, last_full), "anomaly_c"].mean() - offset
-        last12 = part.tail(12)
-        rows.append({"record": record, "twenty_year": twenty, "twenty_label": f"{last_full - 19}–{last_full}",
-                     "last_12": last12["anomaly_c"].mean() - offset,
-                     "last_12_label": f"{last12['date'].min():%b %Y}–{last12['date'].max():%b %Y}"})
-    return pd.DataFrame(rows)
-
-
-# ---------------------------------------------------------------- page 1
-
-def rate_summary(data: pd.DataFrame) -> None:
-    starts = (1880, 1950, 1970, 1990, 2000)
-    rates = rates_from(data, starts)
+def income_summary(data: pd.DataFrame) -> None:
+    fits = year_fits(data)
+    first, last = fits.iloc[0], fits.iloc[-1]
+    low, high = fits.loc[fits["R²"].idxmin()], fits.loc[fits["R²"].idxmax()]
+    trend = "smaller" if last[PER_DOUBLING] < first[PER_DOUBLING] else "larger"
     st.subheader("What the data show")
-    if rates.empty:
-        return
-    summary = rates.groupby("start").agg(low=("rate", "min"), high=("rate", "max"), mean=("rate", "mean"),
-                                         ci_low=("low", "min"), ci_high=("high", "max"), records=("record", "nunique"))
-    end = latest_year(data)
-    base_start = FIRST_RATE_YEAR if FIRST_RATE_YEAR in summary.index else summary.index[-1]
-    base = summary.loc[base_start]
-    earliest, latest_start = summary.index.min(), summary.index.max()
-    rising = bool((summary["mean"].diff().dropna() > 0).all())
-    narrowest = (rates.loc[rates["start"] == base_start, "high"] - rates.loc[rates["start"] == base_start, "low"]).min()
-    spread = base["high"] - base["low"]
-    first_width = summary.loc[earliest, "ci_high"] - summary.loc[earliest, "ci_low"]
-    last_width = summary.loc[latest_start, "ci_high"] - summary.loc[latest_start, "ci_low"]
     st.markdown(
-        ("- **The later the start, the faster the rate.** " if rising else "- **The rate depends on the start year.** ")
-        + f"From {earliest} to {end} the records average {summary.loc[earliest, 'mean']:+.2f} °C per decade; from "
-        f"{base_start} it is {base['mean']:+.2f}, and from {latest_start} it is {summary.loc[latest_start, 'mean']:+.2f}.\n"
-        + (f"- **The records agree closely.** From {base_start}, the rates lie between {base['low']:+.2f} and "
-           f"{base['high']:+.2f} °C per decade, a spread of {spread:.2f}, which is smaller than even the narrowest "
-           f"95% interval ({narrowest:.2f} wide).\n" if spread < narrowest else
-           f"- **The records differ.** From {base_start}, the rates lie between {base['low']:+.2f} and "
-           f"{base['high']:+.2f} °C per decade, a spread of {spread:.2f}, wider than the narrowest 95% interval "
-           f"({narrowest:.2f}).\n")
-        + ("- **Shorter periods are less certain.** " if last_width > first_width else "- **Interval widths.** ")
-        + f"Across records the 95% intervals span {summary.loc[earliest, 'ci_low']:+.2f} to "
-        f"{summary.loc[earliest, 'ci_high']:+.2f} from {earliest}, and {summary.loc[latest_start, 'ci_low']:+.2f} to "
-        f"{summary.loc[latest_start, 'ci_high']:+.2f} from {latest_start}."
+        f"- In **{int(last['Year'])}**, income accounts for **{last['R²']:.0%}** of the differences in life expectancy "
+        f"between {int(last['Countries'])} countries, and each doubling of income goes with about "
+        f"**{last[PER_DOUBLING]:.1f} more years** (95% confidence interval {last['95% confidence interval']}).\n"
+        f"- Across the years in this file, the share explained by income ranges from {low['R²']:.0%} "
+        f"({int(low['Year'])}) to {high['R²']:.0%} ({int(high['Year'])}).\n"
+        f"- The extra years per doubling of income are **{trend}** in {int(last['Year'])} "
+        f"({last[PER_DOUBLING]:.1f}) than in {int(first['Year'])} ({first[PER_DOUBLING]:.1f}): the line is "
+        f"{'flatter' if trend == 'smaller' else 'steeper'} than at the start of the period."
     )
-    table = summary.reset_index().rename(columns={"start": "From"})
-    table["To"] = end
-    table["Average rate (°C per decade)"] = table["mean"].round(3)
-    table["Range across records"] = [format_interval(a, b) for a, b in zip(table["low"], table["high"])]
-    table["95% intervals (all records)"] = [format_interval(a, b) for a, b in zip(table["ci_low"], table["ci_high"])]
-    table["Records"] = table["records"]
-    st.dataframe(table[["From", "To", "Records", "Average rate (°C per decade)", "Range across records",
-                        "95% intervals (all records)"]], hide_index=True, width="stretch")
-    st.caption("Each rate is a straight line fitted to every monthly value from January of the start year to the "
-               "latest month. GISTEMP begins in 1880, so every record is included from 1880 onward.")
+    st.dataframe(
+        fits,
+        hide_index=True,
+        column_config={
+            "Year": st.column_config.NumberColumn(format="%d"),
+            "R²": st.column_config.NumberColumn(format="%.2f"),
+            "Extra years per doubling of income": st.column_config.NumberColumn(format="%.2f"),
+        },
+    )
+    st.caption("One line is fitted for each year across all countries with data in that year. Confidence intervals "
+               "are approximate (slope ± 1.96 standard errors).")
 
 
-# ---------------------------------------------------------------- page 2
+def change_over_time(data: pd.DataFrame) -> None:
+    """Follow each country from the first to the last year: did faster income growth bring larger gains?"""
+    first, last = int(data["year"].min()), int(data["year"].max())
+    changes = country_changes(data)
+    fit = fit_line(changes["log_income_change"], changes["life_expectancy_change"])
+    per_doubling = fit.slope * math.log(2)
+    slope_interval, r_interval = fit.slope_ci(math.log(2)), fit.correlation_ci()
+    cross = income_fit(data.loc[data["year"] == last]).slope * math.log(2)
+    rose = int((changes["life_expectancy_change"] > 0).sum())
+    grew = int((changes["income_ratio"] > 1).sum())
+    fell_but_rose = int(((changes["income_ratio"] < 1) & (changes["life_expectancy_change"] > 0)).sum())
+    groups = (changes.groupby("income_group")
+              .agg(Countries=("country_code", "count"),
+                   **{"Median income change (×)": ("income_ratio", "median")},
+                   **{"Median change in life expectancy (years)": ("life_expectancy_change", "median")})
+              .reindex(["Low income", "Lower middle income", "Upper middle income", "High income"])
+              .dropna().reset_index().rename(columns={"income_group": "Income group"}))
+    top_group = groups.loc[groups["Median change in life expectancy (years)"].idxmax()]
 
-@st.cache_data
-def strongest_events(data: pd.DataFrame, lag: int = DEFAULT_LAG, count: int = 6) -> pd.DataFrame:
-    """The largest El Niño peaks and the global response in the following 12 months."""
-    _, work = enso_fits(data, lag)
-    oni = data.drop_duplicates("date")[["date", "oni"]].dropna().sort_values("date").reset_index(drop=True)
-    peaks = []
-    values = oni["oni"].to_numpy()
-    for i in range(1, len(oni) - 1):
-        if values[i] >= 1.5 and values[i] >= values[i - 1] and values[i] >= values[i + 1]:
-            if peaks and (oni.loc[i, "date"] - peaks[-1]["date"]).days < 365:
-                if values[i] > peaks[-1]["oni"]:
-                    peaks[-1] = {"date": oni.loc[i, "date"], "oni": values[i]}
-                continue
-            peaks.append({"date": oni.loc[i, "date"], "oni": values[i]})
-    rows = []
-    for peak in sorted(peaks, key=lambda p: -p["oni"])[:count]:
-        window = work.loc[(work["date"] > peak["date"]) & (work["date"] <= peak["date"] + pd.DateOffset(months=12))]
-        if window.groupby("record")["date"].count().min() < 12:
-            continue
-        rows.append({"El Niño peak": f"{peak['date']:%b %Y}", "Peak ONI (°C)": round(peak["oni"], 2),
-                     "Global temperature above the long-term curve, next 12 months (°C)":
-                         round(window.groupby("record")["deviation_c"].mean().mean(), 2)})
-    return pd.DataFrame(rows)
+    st.subheader(f"Over time: did countries that got richer gain more years? ({first}–{last})")
+    st.markdown(
+        f"The chart above compares different countries in one year. This section follows **the same country** from "
+        f"{first} to {last}: each dot shows how much its income per person changed (across) and how many years of "
+        "life expectancy it gained or lost (up). The dashed lines mark no change."
+    )
+    a, b, c = st.columns(3)
+    a.metric("Countries where life expectancy rose", f"{rose} of {len(changes)}")
+    b.metric("Median change in life expectancy", f"{changes['life_expectancy_change'].median():+.1f} years")
+    c.metric("Extra years per doubling of income growth", f"{per_doubling:+.1f} years")
+
+    lo, hi = changes["income_ratio"].min(), changes["income_ratio"].max()
+    xs = np.exp(np.linspace(math.log(lo), math.log(hi), 2))
+    line = pd.DataFrame({"x": xs, "y": fit.intercept + fit.slope * np.log(xs)})
+    x = alt.X("income_ratio:Q", scale=alt.Scale(type="log", domain=[lo * 0.9, hi * 1.1], nice=False),
+              title=f"Income per person in {last} relative to {first} (×, log scale)",
+              axis=alt.Axis(labelExpr="format(datum.value, '.1f') + '×'"))
+    points = alt.Chart(changes).mark_circle(size=60, color=POINT, opacity=0.7, stroke="white", strokeWidth=1).encode(
+        x=x,
+        y=alt.Y("life_expectancy_change:Q", title=f"Change in life expectancy, {first}–{last} (years)"),
+        tooltip=[
+            alt.Tooltip("country:N", title="Country"),
+            alt.Tooltip("income_group:N", title="Income group"),
+            alt.Tooltip("income_ratio:Q", title="Income change (×)", format=".2f"),
+            alt.Tooltip("life_expectancy_change:Q", title="Life expectancy change (years)", format="+.1f"),
+        ],
+    )
+    no_growth = alt.Chart(pd.DataFrame({"x": [1.0]})).mark_rule(color=INK, strokeDash=[4, 4]).encode(x="x:Q")
+    no_gain = alt.Chart(pd.DataFrame({"y": [0.0]})).mark_rule(color=INK, strokeDash=[4, 4]).encode(y="y:Q")
+    trend = alt.Chart(line).mark_line(color=INK, strokeWidth=2).encode(x="x:Q", y="y:Q")
+    st.altair_chart(_style((no_growth + no_gain + points + trend).properties(height=380)), width="stretch")
+
+    zero_note = (" The interval includes zero." if includes_zero(r_interval) else "")
+    st.markdown(
+        f"- Life expectancy rose in **{rose} of {len(changes)}** countries, by a median of "
+        f"{changes['life_expectancy_change'].median():+.1f} years. Income per person grew in {grew} countries "
+        f"(median ×{changes['income_ratio'].median():.2f}).\n"
+        f"- In {fell_but_rose} countries, income per person **fell** but life expectancy still **rose**.\n"
+        f"- Countries whose income grew faster gained only slightly more years: about **{per_doubling:+.1f} years per "
+        f"doubling of income growth** (95% confidence interval {format_interval(slope_interval, '+.1f')}), with "
+        f"r = {fit.correlation:+.2f} (95% confidence interval {format_interval(r_interval)}).{zero_note}\n"
+        f"- That is much smaller than the {cross:.1f} years per doubling seen when comparing countries in {last}.\n"
+        f"- By income group, the largest median gain was in **{top_group['Income group'].lower()}** countries "
+        f"({top_group['Median change in life expectancy (years)']:+.1f} years)."
+    )
+    st.dataframe(groups, hide_index=True, column_config={
+        "Median income change (×)": st.column_config.NumberColumn(format="%.2f"),
+        "Median change in life expectancy (years)": st.column_config.NumberColumn(format="%+.1f"),
+    })
+    st.caption(f"Countries with data in both {first} and {last}; income groups use the current (FY2027) classification.")
 
 
-def enso_summary(data: pd.DataFrame) -> None:
-    with_oni = data.loc[data["oni"].notna()]
-    fits, work = enso_fits(with_oni, DEFAULT_LAG)
+def gaps_summary(data: pd.DataFrame) -> None:
+    first, latest = int(data["year"].min()), int(data["year"].max())
+    now = data.loc[data["year"] == latest].sort_values("residual_years", ascending=False)
+    then = data.loc[data["year"] == first].set_index("country_code")["residual_years"]
+    above = now.loc[now["residual_years"] >= 5]
+    below = now.loc[now["residual_years"] <= -5]
+    still_below = [r.country for r in below.itertuples() if then.get(r.country_code, 0) <= -5]
+    still_above = [r.country for r in above.itertuples() if then.get(r.country_code, 0) >= 5]
+    regions = (now.groupby("region")
+               .agg(Countries=("country_code", "count"), **{"Average gap (years)": ("residual_years", "mean")},
+                    **{"5+ years longer": ("residual_years", lambda s: int((s >= 5).sum()))},
+                    **{"5+ years shorter": ("residual_years", lambda s: int((s <= -5).sum()))})
+               .sort_values("Average gap (years)", ascending=False).reset_index()
+               .rename(columns={"region": "Region"}))
+    top, bottom = now.iloc[0], now.iloc[-1]
     st.subheader("What the data show")
-    if not fits:
-        return
-    effect = np.mean([f.enso_per_degree for f in fits.values()])
-    annual = [f.annual_share for f in fits.values()]
-    events = strongest_events(with_oni)
-    latest = with_oni.sort_values("date").iloc[-1]
-    higher = with_oni.drop_duplicates("date")
-    higher = higher.loc[(higher["oni"] > latest["oni"]) & (higher["date"] < latest["date"])]
-    since = f" — the highest since {higher['date'].max():%b %Y}" if not higher.empty else ""
-    latest_part = work.sort_values("date").groupby("record").tail(1)["enso_part_c"].mean()
-    bullets = [
-        f"- **A steady link.** Over {int(with_oni['year'].min())}–{latest_year(data)}, each 1 °C of El Niño warming "
-        f"goes with about {effect:.2f} °C of global warming {DEFAULT_LAG} months later, in every record.",
-        f"- **A sizeable part of the year-to-year wobble.** El Niño and La Niña account for {min(annual):.0%}–"
-        f"{max(annual):.0%} of the variation of yearly averages around the long-term curve.",
+    lines = [
+        f"- In **{latest}**, {len(above)} countries live at least 5 years longer than their income predicts and "
+        f"{len(below)} live at least 5 years shorter. The largest gaps are {top['country']} "
+        f"({top['residual_years']:+.1f} years) and {bottom['country']} ({bottom['residual_years']:+.1f} years).",
+        f"- Of the {len(below)} countries at least 5 years below the line in {latest}, {len(still_below)} were also "
+        f"at least 5 years below in {first}" + (f": {', '.join(still_below)}." if still_below else "."),
+        f"- Of the {len(above)} countries at least 5 years above the line in {latest}, {len(still_above)} were also "
+        f"at least 5 years above in {first}" + (f": {', '.join(still_above)}." if still_above else "."),
+        f"- By region, the average gap in {latest} runs from {regions.iloc[0]['Average gap (years)']:+.1f} years "
+        f"({regions.iloc[0]['Region']}) to {regions.iloc[-1]['Average gap (years)']:+.1f} years "
+        f"({regions.iloc[-1]['Region']}).",
     ]
-    if not events.empty:
-        top = events.iloc[0]
-        bullets.append(
-            f"- **After big El Niños, years run warm.** In the 12 months after the {top['El Niño peak']} peak "
-            f"(ONI {top['Peak ONI (°C)']:+.2f} °C), global temperature averaged "
-            f"{top['Global temperature above the long-term curve, next 12 months (°C)']:+.2f} °C above its long-term curve."
-        )
-    bullets.append(
-        f"- **Now.** The latest ONI value is {latest['oni']:+.2f} °C for the season centred on "
-        f"{latest['date']:%B %Y}{since}. In the latest month, the El Niño part of global temperature is "
-        f"{latest_part:+.2f} °C."
+    st.markdown("\n".join(lines))
+    st.dataframe(
+        regions,
+        hide_index=True,
+        column_config={"Average gap (years)": st.column_config.NumberColumn(format="%+.1f")},
     )
-    st.markdown("\n".join(bullets))
-    if not events.empty:
-        st.dataframe(events, hide_index=True, width="stretch")
-        st.caption(f"El Niño peaks are the highest ONI values of events reaching at least +1.5 °C. The response "
-                   f"averages the selected records over the 12 months after each peak, measured from each record's "
-                   f"long-term curve (all records, delay {DEFAULT_LAG} months).")
+    st.caption(f"Regional figures for {latest}; each country counts once.")
 
 
-# ---------------------------------------------------------------- page 3
+def _factor_fit(frame: pd.DataFrame, column: str):
+    usable = frame.dropna(subset=[column])
+    return fit_line(usable[column], usable["residual_years"]) if len(usable) >= 5 else None
 
-@st.cache_data
-def window_check(data: pd.DataFrame) -> pd.DataFrame:
-    """Rates for commonly quoted windows, as published and with ENSO removed."""
-    series = adjusted_series(data)
-    end = latest_year(data)
-    windows = [(1970, 2009), (2010, end), (2015, end), (2020, end)]
+
+def factor_years(data: pd.DataFrame) -> dict[str, int]:
+    """In how many years does each factor's 95% interval for r exclude zero?"""
+    counts = {"years": 0, "health": 0, "air": 0, "health_max": 0.0}
+    for _, frame in data.groupby("year"):
+        health, air = _factor_fit(frame, "gov_health_exp_pct_gdp"), _factor_fit(frame, "pm25_ug_m3")
+        counts["years"] += 1
+        counts["health"] += int(not includes_zero(health.correlation_ci()))
+        counts["air"] += int(not includes_zero(air.correlation_ci()))
+        counts["health_max"] = max(counts["health_max"], abs(health.correlation))
+    return counts
+
+
+def factors_summary(data: pd.DataFrame) -> None:
+    latest = int(data["year"].max())
     rows = []
-    for first, last in windows:
-        for column, label in (("anomaly_c", "As published"), ("adjusted_c", "El Niño and La Niña removed")):
-            rates = []
-            for record in RECORD_ORDER:
-                part = series.loc[(series["record"] == record) & series["year"].between(first, last)]
-                if len(part) >= 24:
-                    rates.append(fit_trend(decimal_year(part["year"], part["month"]), part[column].to_numpy(float)))
-            if rates:
-                rows.append({"Window": f"{first}–{last}", "Years": last - first + 1, "Temperatures": label,
-                             "Average rate (°C per decade)": round(np.mean([t.rate for t in rates]), 2),
-                             "Widest 95% interval": format_interval(min(t.low for t in rates), max(t.high for t in rates)),
-                             "width": max(t.high for t in rates) - min(t.low for t in rates)})
-    return pd.DataFrame(rows)
-
-
-def acceleration_summary(data: pd.DataFrame) -> None:
-    table = window_check(data)
-    st.subheader("How much do short windows tell us?")
-    if table.empty:
-        return
-    st.markdown(
-        "Rates for recent short windows are often quoted to argue that warming has sped up. The table repeats that "
-        "calculation for four windows, with each window's widest 95% interval across the records."
+    for year, frame in data.groupby("year"):
+        health, air = _factor_fit(frame, "gov_health_exp_pct_gdp"), _factor_fit(frame, "pm25_ug_m3")
+        rows.append({"Year": int(year),
+                     "r: health spending": health.correlation,
+                     "95% CI (spending)": format_interval(health.correlation_ci()),
+                     "r: PM2.5": air.correlation,
+                     "95% CI (PM2.5)": format_interval(air.correlation_ci()),
+                     "excl_h": not includes_zero(health.correlation_ci()),
+                     "excl_a": not includes_zero(air.correlation_ci())})
+    by_year = pd.DataFrame(rows)
+    clear_h, clear_a = int(by_year.pop("excl_h").sum()), int(by_year.pop("excl_a").sum())
+    groups = []
+    now = data.loc[data["year"] == latest]
+    for group in ["Low income", "Lower middle income", "Upper middle income", "High income"]:
+        frame = now.loc[now["income_group"] == group]
+        health, air = _factor_fit(frame, "gov_health_exp_pct_gdp"), _factor_fit(frame, "pm25_ug_m3")
+        if health and air:
+            groups.append({"Income group": group, "Countries": len(frame),
+                           "r: health spending": health.correlation,
+                           "r: PM2.5": air.correlation,
+                           "95% CI (PM2.5)": format_interval(air.correlation_ci())})
+    by_group = pd.DataFrame(groups)
+    h, a = by_year["r: health spending"], by_year["r: PM2.5"]
+    max_share = max((h ** 2).max(), (a ** 2).max())
+    sign_text = lambda s, word: (f"{word} in every year" if (s > 0).all() else
+                                 f"negative in every year" if (s < 0).all() else "positive in some years and negative in others")
+    best_row, best_col = max(
+        ((row, col) for _, row in by_group.iterrows()
+         for col in ["r: health spending", "r: PM2.5"]),
+        key=lambda pair: abs(pair[0][pair[1]]),
     )
-    st.dataframe(table.drop(columns="width"), hide_index=True, width="stretch")
-    raw = table.loc[table["Temperatures"] == "As published"].set_index("Window")
-    adj = table.loc[table["Temperatures"] != "As published"].set_index("Window")
-    longest, recent, shortest = raw.index[0], raw.index[1], raw.index[-1]
-    narrower = adj.loc[shortest, "width"] < raw.loc[shortest, "width"]
-    later = adj.loc[recent, "Average rate (°C per decade)"]
-    earlier = adj.loc[longest, "Average rate (°C per decade)"]
+    best_factor = best_col.split(": ")[1]
+    st.subheader("What the data show")
     st.markdown(
-        ("- **Short windows are uncertain.** " if raw.loc[shortest, "width"] > raw.loc[longest, "width"] else "- ")
-        + f"As published, the {shortest} window's intervals span {raw.loc[shortest, 'width']:.2f} °C per decade, "
-        f"against {raw.loc[longest, 'width']:.2f} for {longest}.\n"
-        + ("- **Removing El Niño and La Niña narrows them.** " if narrower else
-           "- **Removing El Niño and La Niña does not narrow them.** ")
-        + f"For {shortest} the span becomes {adj.loc[shortest, 'width']:.2f} °C per decade.\n"
-        + f"- **The rate since {recent[:4]} is {'higher' if later > earlier else 'not higher'} than in {longest}.** "
-        f"With El Niño and La Niña removed, {recent} averages {later:+.2f} °C per decade, compared with "
-        f"{earlier:+.2f} in {longest}."
+        f"- The link between the gap and **government health spending** is {sign_text(h, 'positive')}, with r between "
+        f"{h.min():+.2f} and {h.max():+.2f}.\n"
+        f"- The link between the gap and **PM2.5 air pollution** is {sign_text(a, 'positive')}, with r between "
+        f"{a.min():+.2f} and {a.max():+.2f}.\n"
+        f"- In no year does either measure account for more than **{max_share:.0%}** of the variation in the gap.\n"
+        f"- The 95% confidence interval for r excludes zero in {clear_h} of {len(by_year)} years for health spending "
+        f"and in {clear_a} of {len(by_year)} years for PM2.5; in the other years the data cannot tell the link apart "
+        "from no link.\n"
+        f"- Within income groups in {latest}, the strongest single link is {best_factor} among "
+        f"{best_row['Income group'].lower()} countries (r = {best_row[best_col]:+.2f}, "
+        f"{describe_strength(best_row[best_col])})."
     )
+    left, right = st.container(), st.container()
+    with left:
+        st.dataframe(by_year, hide_index=True, column_config={
+            "Year": st.column_config.NumberColumn(format="%d"),
+            "r: health spending": st.column_config.NumberColumn(format="%+.2f"),
+            "r: PM2.5": st.column_config.NumberColumn(format="%+.2f"),
+        })
+        st.caption("Pearson's r between each country's gap and the factor, by year, with approximate 95% confidence "
+                   "intervals (Fisher z).")
+    with right:
+        st.dataframe(by_group, hide_index=True, column_config={
+            "r: health spending": st.column_config.NumberColumn(format="%+.2f"),
+            "r: PM2.5": st.column_config.NumberColumn(format="%+.2f"),
+        })
+        st.caption(f"The same correlations within each income group, {latest}.")
 
-
-# ---------------------------------------------------------------- conclusion
 
 def conclusion(data: pd.DataFrame) -> None:
-    end = latest_year(data)
-    rates = rates_from(data, (FIRST_RATE_YEAR,))
-    with_oni = data.loc[data["oni"].notna()]
-    fits, _ = enso_fits(with_oni, DEFAULT_LAG)
-    windows = window_check(data)
-    adj = windows.loc[windows["Temperatures"] != "As published"].set_index("Window")
-    raw = windows.loc[windows["Temperatures"] == "As published"].set_index("Window")
-    warm = above_preindustrial(data)
-    events = strongest_events(with_oni)
-    spread = rates["rate"].max() - rates["rate"].min()
-    narrowest = (rates["high"] - rates["low"]).min()
-    later = adj.loc[f"2010–{end}", "Average rate (°C per decade)"]
-    earlier = adj.loc["1970–2009", "Average rate (°C per decade)"]
+    first, latest = int(data["year"].min()), int(data["year"].max())
+    now = data.loc[data["year"] == latest]
+    fit_now, fit_first = income_fit(now), income_fit(data.loc[data["year"] == first])
+    health = fit_line(now["gov_health_exp_pct_gdp"], now["residual_years"])
+    air = fit_line(now["pm25_ug_m3"], now["residual_years"])
+    changes = country_changes(data)
+    change_fit = fit_line(changes["log_income_change"], changes["life_expectancy_change"])
+    ranked = now.sort_values("residual_years", ascending=False)
+    best = ", ".join(ranked["country"].head(3))
+    worst = ", ".join(ranked["country"].tail(3).iloc[::-1])
+    sign = lambda r: "positive" if r > 0 else "negative"
+    both_zero = includes_zero(health.correlation_ci()) and includes_zero(air.correlation_ci())
+    yearly = factor_years(data)
 
-    st.subheader("What the data show")
-    points = [
-        f"1. **The world is warming at about {rates['rate'].mean():.2f} °C per decade since {FIRST_RATE_YEAR}**; "
-        f"the {len(rates)} records' rates lie between {rates['rate'].min():.2f} and {rates['rate'].max():.2f} °C per "
-        f"decade, a spread {'smaller' if spread < narrowest else 'larger'} than the narrowest 95% interval "
-        f"({narrowest:.2f}).",
-        f"2. **El Niño and La Niña explain a sizeable part of the year-to-year ups and downs** "
-        f"({min(f.annual_share for f in fits.values()):.0%}–{max(f.annual_share for f in fits.values()):.0%} of "
-        f"the variation of yearly averages around the long-term curve), with global temperature following the "
-        f"Pacific by about {DEFAULT_LAG} months.",
-        f"3. **With El Niño and La Niña removed, the rate since 2010 is {'higher' if later > earlier else 'not higher'} "
-        f"than in 1970–2009**: {later:+.2f} against {earlier:+.2f} °C per decade on average. Page 3 shows whether "
-        f"the 95% intervals of the two periods overlap for each record and split year.",
-        f"4. **Short windows can mislead in either direction.** As published, the 2015–{end} rate averages "
-        f"{raw.loc[f'2015–{end}', 'Average rate (°C per decade)']:+.2f} °C per decade with an interval "
-        f"{raw.loc[f'2015–{end}', 'width']:.2f} °C per decade wide; removing El Niño and La Niña gives "
-        f"{adj.loc[f'2015–{end}', 'Average rate (°C per decade)']:+.2f}.",
-    ]
-    if not warm.empty:
-        points.append(
-            f"5. **Relative to 1850–1900**, the {warm.iloc[0]['twenty_label']} average is "
-            f"{warm['twenty_year'].min():.2f}–{warm['twenty_year'].max():.2f} °C warmer in the {len(warm)} records that "
-            f"reach back that far, and the latest 12 months are {warm['last_12'].min():.2f}–{warm['last_12'].max():.2f} °C warmer."
-        )
-    st.markdown("\n".join(points))
-
-    st.subheader("What the data cannot tell us")
+    st.markdown(f"**What the data show**")
     st.markdown(
-        "- **Why the rate changed.** Only El Niño and La Niña are removed here. Volcanic eruptions, the solar cycle, "
-        "changes in air pollution (aerosols) and greenhouse gases also shape the curve, and this dataset does not "
-        "separate them.\n"
-        "- **What comes next.** These are observations only. A straight line fitted to the past is not a forecast, "
-        "so the dashboard draws no lines beyond the latest month.\n"
-        "- **Exact values.** The four records are estimates built from incomplete coverage. Their published "
-        "uncertainty (shown for HadCRUT5 and Berkeley Earth) is a few hundredths of a degree in recent decades and "
-        "larger before 1900."
+        f"1. **Richer countries live longer.** In {latest}, income accounts for {fit_now.r_squared:.0%} of the "
+        f"differences in life expectancy between {fit_now.n} countries; each doubling of income goes with about "
+        f"{fit_now.slope * math.log(2):.1f} more years (95% confidence interval "
+        f"{format_interval(fit_now.slope_ci(math.log(2)), '.1f')}), a flatter slope than in {first} "
+        f"({fit_first.slope * math.log(2):.1f} years).\n"
+        f"2. **But getting richer explains little of who gained most.** From {first} to {latest}, life expectancy "
+        f"rose in {int((changes['life_expectancy_change'] > 0).sum())} of {len(changes)} countries (median "
+        f"{changes['life_expectancy_change'].median():+.1f} years). Faster income growth went with only about "
+        f"{change_fit.slope * math.log(2):+.1f} extra years per doubling (95% confidence interval "
+        f"{format_interval(change_fit.slope_ci(math.log(2)), '+.1f')}).\n"
+        f"3. **Countries with similar incomes still differ a lot.** In {latest}, gaps range from "
+        f"{ranked['residual_years'].iloc[0]:+.1f} to {ranked['residual_years'].iloc[-1]:+.1f} years; "
+        f"{int((now['residual_years'] >= 5).sum())} countries live at least 5 years longer than predicted and "
+        f"{int((now['residual_years'] <= -5).sum())} at least 5 years shorter.\n"
+        f"4. **Both ideas get only weak support.** Government health spending has a "
+        f"{describe_strength(health.correlation)} {sign(health.correlation)} link with the gap (r = "
+        f"{health.correlation:+.2f}; 95% confidence interval {format_interval(health.correlation_ci())}) and PM2.5 "
+        f"air pollution a {describe_strength(air.correlation)} {sign(air.correlation)} link (r = "
+        f"{air.correlation:+.2f}; {format_interval(air.correlation_ci())}). The directions match ideas 1 and 2, but "
+        + (f"both intervals include zero, so in {latest} neither link can be told apart from no link."
+           if both_zero else
+           f"each explains only about {health.r_squared:.1%} and {air.r_squared:.1%} of the gap.")
+        + f" Across all {yearly['years']} years, the health-spending link is distinguishable from zero in "
+        f"{yearly['health']} years but never stronger than r = {yearly['health_max']:.2f}; the PM2.5 link is "
+        f"distinguishable from zero in only {yearly['air']} years. Idea 1 therefore gets weak but fairly consistent "
+        "support, and idea 2 very little."
     )
-
-    response = events["Global temperature above the long-term curve, next 12 months (°C)"] if not events.empty else None
-    st.subheader("What this means for climate policy analysts")
+    st.markdown("**What the data cannot tell us**")
     st.markdown(
-        "- **Quote rates with their period and interval.** The same data give different rates for different start "
-        "years; a rate without its period and 95% interval cannot be compared with another.\n"
-        "- **Do not read one hot or cool year as a change in the trend.** "
-        + (f"In the 12 months after the largest El Niño peaks, global temperature sat between {response.min():+.2f} "
-           f"and {response.max():+.2f} °C from its long-term curve (page 2).\n" if response is not None else "\n")
-        + f"- **Check more than one record.** A claim that holds in only one record deserves a second look; here the "
-        f"records' rates since {FIRST_RATE_YEAR} differ by {spread:.2f} °C per decade.\n"
-        "- **Single months or years above 1.5 °C are not the Paris Agreement threshold**, which refers to warming "
-        "averaged over about 20 years. The 20-year figure above is the comparable one."
+        "- **Cause and effect.** These are associations between national averages. Healthier populations may also "
+        "earn more, so the arrow can run both ways.\n"
+        "- **Why the exceptions differ.** Factors such as conflict, disease outbreaks or how health money is spent are "
+        "not in this dataset.\n"
+        "- **Exact values for every country.** Many figures, including most life expectancy and all PM2.5 values, are "
+        "modelled estimates (see Methods and limitations below). The confidence intervals reflect sampling variation "
+        "between countries, not errors in these estimates."
     )
-
-    latest = with_oni.sort_values("date").iloc[-1]
-    st.subheader("Next steps")
+    st.markdown("**What this means for policy analysts**")
     st.markdown(
-        "- Remove volcanic and solar effects as well (for example with aerosol optical depth and total solar "
-        "irradiance series) and see whether the post-2010 change remains.\n"
-        f"- Repeat the comparison as new months arrive. The latest ONI value is {latest['oni']:+.2f} °C "
-        f"({latest['date']:%B %Y}), an El Niño; the months that follow it will become the end of every recent window."
+        "- Higher income goes with longer lives, but it does not guarantee them: countries at similar incomes "
+        "differ by many years, and life expectancy rose even where income did not.\n"
+        f"- Countries well above the line in {latest}, such as {best}, are peers worth studying. Countries well below "
+        f"it, such as {worst}, are where life expectancy falls furthest below what income predicts.\n"
+        "- This evidence does not show that more health spending or cleaner air alone would close the gap. Decisions "
+        "on either should rest on further, country-level evidence.\n"
+        "- To look at one country, use the **Country spotlight**: it compares any country with the ten countries "
+        "closest to it in income."
+    )
+    st.page_link(PAGE_SPOTLIGHT, label="Open the Country spotlight", icon=":material/travel_explore:")
+    st.markdown("**Next steps for researchers**")
+    st.markdown(
+        "Hold other factors constant in a multivariable model (for example sanitation, disease burden or conflict, "
+        "all available in WDI); weight countries by population; use the uncertainty ranges published with modelled "
+        "estimates; and examine why low-income countries gained the most years over the period."
     )
 
 
 def methods_and_limitations() -> None:
-    with st.expander("Methods and limitations", expanded=False):
+    with st.expander("Methods and limitations (for academic readers)"):
         st.markdown(
-            "**Common baseline.** Each record is published on its own baseline (GISTEMP and Berkeley Earth 1951–1980, "
-            "NOAA 1901–2000, HadCRUT5 1961–1990). For every record and calendar month, the 1991–2020 mean is "
-            "subtracted, so all four share the WMO's current 30-year normal. Rates do not depend on the baseline.\n\n"
-            "**Rates.** A straight line is fitted by ordinary least squares to the monthly anomalies in a period. "
-            "Monthly values are autocorrelated, so the 95% interval uses an effective sample size "
-            "n(1−r)/(1+r), where r is the lag-1 autocorrelation of the residuals (Santer et al., 2008), with "
-            "Student's t. With strong autocorrelation and short windows, such intervals can still be slightly too "
-            "narrow.\n\n"
-            "**El Niño and La Niña.** For each record, monthly anomalies are regressed on a quadratic curve in time "
-            "plus the Oceanic Niño Index shifted by a delay in months. The ENSO part (coefficient × ONI) is "
-            "subtracted to give the adjusted series. The effect per 1 °C of ONI barely changes if the curve is a "
-            "straight line, but the share of variation explained is lower (because a straight line leaves the "
-            "curve's bend in the residuals). A delay of 2 months fits best for all four records over 1950–2026. "
-            "The ONI is itself a three-month running mean, dated here to its middle month.\n\n"
-            "**Year-to-year share.** Calendar-year means of the deviation from the curve are compared with "
-            "calendar-year means of the ENSO part; the share is 1 − (unexplained variance / total variance).\n\n"
-            "**Records.** Berkeley Earth's original 1° product stopped updating in 2025 (its last month is December "
-            "2024); this dashboard uses its high-resolution successor, which Berkeley Earth labels preliminary and "
-            "not yet peer reviewed. In it, sea-ice areas use air temperatures when ice is present. Records end in "
-            "different months; each rate uses every month a record has."
+            "**Method.** For each year, an ordinary least squares line is fitted across all countries with data: "
+            "life expectancy = a + b × ln(GDP per capita, PPP). Every country counts once, regardless of population. "
+            "R² is the share of cross-country variation in life expectancy the line explains, and b × ln 2 is the "
+            "change in life expectancy per doubling of income. The *gap* (residual) is actual minus predicted life "
+            "expectancy. Question 3 fits a second simple line of the gap on one factor and reports Pearson's r.\n\n"
+            "**Change over time.** For each country with data in both the first and last year, the change in life "
+            "expectancy is regressed on the change in ln(GDP per capita); the slope × ln 2 is the extra change in life "
+            "expectancy per doubling of income growth.\n\n"
+            "**Uncertainty.** Confidence intervals are approximate 95% intervals: slope ± 1.96 standard errors, and "
+            "Fisher's z transformation for Pearson's r. They treat countries as independent observations and do not "
+            "include the error in modelled estimates.\n\n"
+            "**Country spotlight.** Income peers are the ten countries with the closest ln(GDP per capita, PPP) in the "
+            "selected year.\n\n"
+            "**Coverage.** The World Bank lists 217 economies; a country-year is included when both GDP per capita and "
+            "life expectancy are reported, which leaves 199 economies and 4,721 of 5,208 country-years for 2000–2023. "
+            "The period starts in 2000 because government health expenditure starts then, and ends in 2023 because "
+            "health spending and PM2.5 are not yet published for 2024. Missing health-spending or PM2.5 values are kept "
+            "as missing, not filled in.\n\n"
+            "**Limitations.**\n"
+            "- These are associations between national averages, not causal effects. Health may also raise income "
+            "(reverse causality), and no other factors are held constant.\n"
+            "- Many values are modelled rather than measured. Life expectancy comes largely from UN World Population "
+            "Prospects estimates, especially where death registration is incomplete; extreme values (for example "
+            "14.7 years for the Central African Republic in 2009) reflect modelled crisis mortality and should be read "
+            "with care. PM2.5 exposure is modelled by the Global Burden of Disease study from satellite and ground data.\n"
+            "- PPP-based GDP is designed for international comparison, but the subject's data catalogue notes that WDI "
+            "national accounts are not built for precise level comparisons; Penn World Table or Maddison data could be "
+            "used as a robustness check.\n"
+            "- Regions and income groups use the World Bank FY2027 classification (released July 2026) for every year, "
+            "so a country's group in earlier years may differ from its historical classification.\n"
+            "- PM2.5 captures only one environmental pressure; other environmental costs of growth are not measured here.\n\n"
+            "**Offline sample.** `data/sample.csv` keeps every economy for 2000, 2005, 2010, 2015, 2020 and 2023, so "
+            "each year's line is identical to the full dataset; `data/processed.csv` from the live pipeline covers every year."
         )

@@ -1,84 +1,66 @@
-# How fast is the world warming?
+# Does getting richer mean living longer?
 
-A Streamlit dashboard for **climate policy analysts in government and international agencies who track
-progress against temperature goals**. It asks:
+A Streamlit dashboard on the World Bank's World Development Indicators (subject: `world_development_indicators`).
 
-> How fast is the world warming once El Niño and La Niña are set aside, and do the major temperature
-> records agree on the rate?
+**Question.** As countries get richer, do their people live longer, and is the gap between a country's actual and expected life expectancy linked more to government health spending or to air pollution?
 
-## Pages
+**Audience.** Government policy analysts in health, finance and environment ministries, and academic researchers in development economics and public health.
 
-| Page | File | What it shows |
+**Pages.** `app.py` sets up navigation across six pages:
+
+| Page | File | Content |
 |---|---|---|
-| Overview | `home.py` | The question and audience over the warming stripes; annual global temperature compared with 1850–1900 for a selected record, with its 20-year average; the three questions; the four records and the ONI; data access |
-| 1. Warming rate | `sections/1_warming_rate.py` | View `warming_rate`: 12-month means and straight-line trends for any period and set of records beside the rates with 95% intervals, and rates from different start years |
-| 2. El Niño and La Niña | `sections/2_el_nino.py` | View `enso_effect`: the Oceanic Niño Index beside each record's deviation from its long-term curve, the effect per 1 °C of ONI, the share of variation explained, and the response after the largest El Niño peaks |
-| 3. Has it sped up? | `sections/3_acceleration.py` | View `acceleration`: annual means with the two straight lines beside each record's rates before and after a chosen year, with or without the El Niño/La Niña part, and a check of commonly quoted short windows |
-| Conclusion | `sections/4_conclusion.py` | What the data show, what they cannot tell us, what this means for policy analysts, next steps, methods and limitations |
+| Overview | `home.py` | The question and the two ideas it tests, where the dashboard sits among the WDI data themes, the indicators used, cards linking to each question, and data access |
+| 1. Income and life expectancy | `sections/1_income_and_life_expectancy.py` | View `income_health`: life expectancy against GDP per capita (log scale) with one fitted line per year, R² and years gained per doubling of income (with 95% CI); then change within each country 2000–2023 (income growth vs life-expectancy gain) |
+| 2. Longer or shorter than predicted | `sections/2_longer_or_shorter.py` | View `residual_ranking`: each country's gap (actual minus predicted life expectancy), largest gaps chart and full table, regional summary; then a world map of the gap and the distribution of gaps by region or income group |
+| 3. Health spending or air pollution? | `sections/3_spending_or_pollution.py` | View `gap_factors`: the gap against government health expenditure (% of GDP) or PM2.5 exposure, with Pearson's r by year and by income group |
+| Conclusion | `sections/4_conclusion.py` | What the data show and do not show, implications for the audience, methods and limitations |
+| Country spotlight | `sections/5_country_spotlight.py` | Tool: one country against its ten closest income peers (gap, rank, health spending, PM2.5, gap over time) |
 
-`app.py` holds the navigation (`st.navigation`, menu at the top).
+The explanations on pages 1–3 only describe what the data show; every number in them is computed from the loaded data. The theme icons and the card pictures were made for this dashboard (the card pictures are miniature charts drawn from the data).
 
 ## Data
 
-Five files, downloaded on 13 October 2026 and kept in `data/raw/`:
+Four WDI indicators and the World Bank country list, retrieved from the Indicators API on 2026-10-12 (WDI last updated 2026-10-08), licensed CC BY 4.0:
 
-| Source | Publisher | Baseline as published | Licence |
-|---|---|---|---|
-| GISTEMP v4, global land-ocean monthly means | NASA Goddard Institute for Space Studies | 1951–1980 | Public domain |
-| Climate at a Glance, global land and ocean (NOAAGlobalTemp) | NOAA National Centers for Environmental Information | 1901–2000 | Public domain |
-| HadCRUT.5.2.0.0 global monthly summary series | Met Office Hadley Centre and CRU, University of East Anglia | 1961–1990 | Open Government Licence v3.0 |
-| Global_TAVG_monthly (high-resolution product) | Berkeley Earth | 1951–1980 | CC BY-NC 4.0 |
-| Oceanic Niño Index (ONI) | NOAA Climate Prediction Center | centred 30-year periods | Public domain |
+| Code | Indicator | Original source |
+|---|---|---|
+| NY.GDP.PCAP.PP.KD | GDP per capita, PPP (constant 2021 international $) | ICP, Eurostat-OECD PPP Programme, national accounts, IMF WEO |
+| SP.DYN.LE00.IN | Life expectancy at birth, total (years) | UN World Population Prospects, national statistical offices, Eurostat |
+| SH.XPD.GHED.GD.ZS | Domestic general government health expenditure (% of GDP) | WHO Global Health Expenditure Database |
+| EN.ATM.PM25.MC.M3 | PM2.5 air pollution, mean annual exposure (µg/m³) | IHME Global Burden of Disease Study 2023 |
 
-Berkeley Earth's older 1° product (`Land_and_Ocean_complete.txt`) stopped updating in 2025 and ends in
-December 2024, so its high-resolution successor is used. Berkeley Earth labels that file preliminary and not
-yet peer reviewed; its rates match the other three records closely.
+The raw responses are kept in `data/raw/` as a snapshot. The exact URLs are listed in `dashboard.yml`.
 
-`data/processed.csv` has one row per record per month (8,000+ rows). `data/sample.csv` keeps every month from
-1950 onward (the start of the ONI), enough to run every view offline.
+The map on page 2 uses Natural Earth 1:110m country outlines (public domain), packaged by world-atlas 2.0.2 (ISC licence), with ISO numeric ids recoded to the World Bank's ISO alpha-3 codes using world-countries 5.1.0 (ODbL). The result is bundled as `data/geo/countries-110m-iso3.json` so the map works offline; `src/build_map.py` documents how it was made.
 
-## Running
+- `data/processed.csv`: every year 2000–2023 (4,721 country-years, 199 economies).
+- `data/sample.csv`: the offline sample, every economy for 2000, 2005, 2010, 2015, 2020 and 2023 (1,178 rows). Because each year keeps all economies, each year's fitted line matches the full data.
+
+## Run
+
+Python 3.11 is required. The direct dependencies are pinned in `pyproject.toml` and `requirements.txt`.
 
 ```bash
-python -m venv .venv && source .venv/bin/activate      # Python 3.11
 pip install -r requirements.txt
-python -m src.data --acquire        # optional: download the five raw files again
-python -m src.data                  # rebuild and validate data/processed.csv from data/raw/
-streamlit run app.py
+streamlit run app.py                      # uses data/processed.csv
+DASHBOARD_SAMPLE_MODE=1 streamlit run app.py   # offline sample
 ```
 
-Offline: `DASHBOARD_SAMPLE_MODE=1 python -m src.data` rebuilds `data/processed.csv` from the sample, and
-`DASHBOARD_SAMPLE_MODE=1 streamlit run app.py` runs the app from it. `python -m src.data --refresh-sample`
-rewrites the sample from the full data. Tests: `pytest`.
+## Pipeline
 
-## Code
+```bash
+python -m src.data --acquire              # download the five raw JSON files to data/raw/
+python -m src.data                        # transform + validate -> data/processed.csv
+python -m src.data --refresh-sample       # same, and rewrite data/sample.csv
+DASHBOARD_SAMPLE_MODE=1 python -m src.data   # offline: rebuild processed.csv from the sample
+python -m src.data --validate             # validate data/processed.csv
+```
 
-`src/data.py` holds acquisition, transformation (one reader per publisher's format, the common 1991–2020
-baseline, the ONI join) and validation. `src/analysis.py` holds the calculations: straight-line rates with
-autocorrelation-adjusted 95% intervals, and the El Niño regression. Presentation lives in `src/views.py`
-(the three assessed views), `src/stories.py` (data-only page summaries, the conclusion and methods),
-`src/overview.py` (overview page parts), `src/theme.py` (page style, section headings, source lines, footer and
-warming stripes) and `src/loading.py` (cached data loading).
+Without `--acquire`, existing raw files are reused. If the API cannot be reached, open each URL in a browser and save it under `data/raw/` with the indicator code as the file name (for example `data/raw/SP.DYN.LE00.IN.json`) and `countries.json`.
 
-## Methods in brief
+`src/data.py` holds acquisition, transformation and validation. `src/analysis.py` holds the line fit used by both the pipeline and the views. Presentation lives in `src/views.py` (the three assessed views), `src/stories.py` (data-only page summaries, change over time and the conclusion), `src/overview.py` (overview page parts), `src/spotlight.py` (country spotlight), `src/geography.py` (map and distribution), `src/theme.py` (page banners) and `src/loading.py` (cached data loading).
 
-- **Common baseline.** For each record and calendar month the 1991–2020 mean is subtracted. Rates do not
-  depend on the baseline.
-- **Rates.** Ordinary least squares on monthly anomalies; the 95% interval uses an effective sample size
-  n(1−r)/(1+r) from the lag-1 autocorrelation r of the residuals, with Student's t (Santer et al., 2008).
-- **El Niño and La Niña.** Anomaly = quadratic curve in time + c × ONI shifted by a delay (default 2 months,
-  the best fit for all four records over 1950–2026). The ENSO part c × ONI is subtracted for the adjusted
-  series. Volcanic, solar and aerosol effects are not removed.
-- **Charts.** Altair 6.3.0. Record colours follow the record across pages (blue GISTEMP, orange NOAA,
-  aqua HadCRUT5, yellow Berkeley Earth), checked for colour-vision deficiency; every chart also has a
-  legend and a table.
+## Method and limitations
 
-## Design
-
-The layout follows the pattern of public climate-indicator portals such as the IMF Climate Change Indicators
-Dashboard: a solid blue top bar, a full-width picture under it, a line of links to every section, sections with
-a centred title and description, controls on the right above the charts, charts on white panels with a short
-source line under them, a right-aligned download button, and a blue footer. Only the pattern is borrowed; every
-picture and chart is drawn from this dashboard's own data (the picture is the warming stripes of the NOAA
-record). The style lives in `src/theme.py` (CSS injected once from `app.py`) and the colours of the page in
-`.streamlit/config.toml`.
+For each year, ordinary least squares fits life expectancy on ln(GDP per capita, PPP) across countries, unweighted. The residual (gap) is actual minus predicted life expectancy. Change over time regresses each country's change in life expectancy on its change in ln(GDP per capita) between the first and last year. Confidence intervals are approximate 95% intervals (slope ± 1.96 SE; Fisher z for r) and do not include the error in modelled estimates. These are cross-country associations, not causal effects. Many values are modelled, notably life expectancy (UN WPP) and PM2.5 (GBD). Income groups use the FY2027 classification for every year. The dashboard's "Methods and limitations" section has the full notes.

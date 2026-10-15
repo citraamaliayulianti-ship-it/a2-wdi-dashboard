@@ -13,14 +13,14 @@ ROOT = Path(__file__).resolve().parents[1]
 SAMPLE = ROOT / "data" / "sample.csv"
 PROCESSED = ROOT / "data" / "processed.csv"
 
-TITLE = "How fast is the world warming?"
+TITLE = "Does getting richer mean living longer?"
 QUESTION = (
-    "How fast is the world warming once El Niño and La Niña are set aside, and do the major "
-    "temperature records agree on the rate?"
+    "As countries get richer, do their people live longer, and is the gap between a country's actual and "
+    "expected life expectancy linked more to government health spending or to air pollution?"
 )
 AUDIENCE = (
-    "Climate policy analysts in government and international agencies who track progress "
-    "against temperature goals"
+    "Government policy analysts in health, finance and environment ministries, and academic researchers in "
+    "development economics and public health"
 )
 
 
@@ -28,12 +28,12 @@ AUDIENCE = (
 def load_data(path: str) -> pd.DataFrame:
     frame = pd.read_csv(
         path,
-        dtype={"record_id": str, "record": str, "reported_baseline": str},
+        dtype={"country_code": str, "country": str, "region": str, "income_group": str},
         keep_default_na=False,
         na_values=[""],
         parse_dates=["date"],
     )
-    return frame.sort_values(["record_id", "date"]).reset_index(drop=True)
+    return frame.sort_values(["year", "country"]).reset_index(drop=True)
 
 
 def data_path() -> Path:
